@@ -1,0 +1,2407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>Work Timesheet</title>
+
+<!-- PWA: Safari / iOS home screen install -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Timesheet">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#2a6e4a">
+
+<!-- Inline SVG icons as data URIs (no external files needed) -->
+<script>
+(function(){
+  // Build a 512x512 SVG icon and register it as apple-touch-icon
+  var svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">'
+    +'<rect width="512" height="512" rx="112" fill="#2a6e4a"/>'
+    +'<rect x="128" y="96" width="256" height="320" rx="20" fill="#fff" opacity=".15"/>'
+    +'<rect x="148" y="116" width="216" height="280" rx="14" fill="#fff"/>'
+    // Clock circle
+    +'<circle cx="256" cy="220" r="72" fill="none" stroke="#2a6e4a" stroke-width="14"/>'
+    +'<line x1="256" y1="220" x2="256" y2="166" stroke="#2a6e4a" stroke-width="12" stroke-linecap="round"/>'
+    +'<line x1="256" y1="220" x2="294" y2="248" stroke="#1b4332" stroke-width="12" stroke-linecap="round"/>'
+    +'<circle cx="256" cy="220" r="8" fill="#2a6e4a"/>'
+    // Lines (log entries)
+    +'<rect x="186" y="316" width="140" height="10" rx="5" fill="#2a6e4a" opacity=".35"/>'
+    +'<rect x="186" y="334" width="100" height="10" rx="5" fill="#2a6e4a" opacity=".25"/>'
+    +'<rect x="186" y="352" width="120" height="10" rx="5" fill="#2a6e4a" opacity=".2"/>'
+    +'</svg>';
+  var dataUrl='data:image/svg+xml;base64,'+btoa(svg);
+  // apple-touch-icon
+  var link=document.createElement('link');
+  link.rel='apple-touch-icon';link.href=dataUrl;
+  document.head.appendChild(link);
+  // favicon
+  var fav=document.createElement('link');
+  fav.rel='icon';fav.type='image/svg+xml';fav.href=dataUrl;
+  document.head.appendChild(fav);
+  // Inline web app manifest
+  var manifest={
+    name:'Work Timesheet',
+    short_name:'Timesheet',
+    description:'Daily work timesheet with activity logging and location tracking',
+    start_url:'.',
+    display:'standalone',
+    orientation:'portrait',
+    background_color:'#f4f3ef',
+    theme_color:'#2a6e4a',
+    icons:[
+      {src:dataUrl,sizes:'512x512',type:'image/svg+xml',purpose:'any maskable'}
+    ]
+  };
+  var mLink=document.createElement('link');
+  mLink.rel='manifest';
+  mLink.href='data:application/manifest+json;charset=utf-8,'+encodeURIComponent(JSON.stringify(manifest));
+  document.head.appendChild(mLink);
+})();
+</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+:root{
+  --bg:#f4f3ef;--sf:#fff;--sf2:#f0efe9;--bd:#e0ddd5;--bd2:#c8c4b8;
+  --tx:#1a1916;--tx2:#5c5a54;--tx3:#9a9890;
+  --gn:#2a6e4a;--gn-bg:#d8f3dc;--gn-dk:#1b4332;
+  --rd:#952020;--rd-bg:#fde8e8;
+  --am:#b05008;--am-bg:#fef0e2;
+  --bl:#1a4f7a;--bl-bg:#e8f1fb;
+  --pu:#4a3880;--pu-bg:#eeeafc;
+  --tl:#0d6e6e;--tl-bg:#e0f4f4;
+  --r:8px;--rl:12px;--sh:0 1px 3px rgba(0,0,0,.08);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);font-size:14px;line-height:1.5;min-height:100vh;}
+.page{display:none;}.page.active{display:block;}
+#pgWelcome.active{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:18px;padding:28px 16px;text-align:center;}
+.wcard{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:22px;width:100%;max-width:380px;box-shadow:var(--sh);display:flex;flex-direction:column;gap:14px;}
+.swatches{display:flex;gap:7px;flex-wrap:wrap;}
+.sw{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2.5px solid transparent;flex-shrink:0;transition:transform .1s;}
+.sw:hover,.sw.on{transform:scale(1.18);border-color:var(--tx);}
+.sw.cust{background:conic-gradient(red,yellow,lime,cyan,blue,magenta,red);position:relative;overflow:hidden;}
+.sw.cust input[type=color]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.cprev{font-size:18px;font-weight:600;min-height:26px;text-align:center;transition:color .2s;}
+.iphone-tip{background:var(--bl-bg);border:1px solid var(--bl);border-radius:var(--r);padding:10px 12px;font-size:12px;color:var(--bl);text-align:left;line-height:1.6;}
+input[type=text],input[type=number],input[type=time],select,textarea{width:100%;padding:8px 10px;border:1px solid var(--bd2);border-radius:var(--r);background:var(--sf2);color:var(--tx);font-family:inherit;font-size:13px;outline:none;-webkit-appearance:none;transition:border-color .15s;}
+input:focus,select:focus,textarea:focus{border-color:var(--bl);background:var(--sf);}
+textarea{resize:vertical;min-height:78px;}
+.flbl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--tx2);margin-bottom:4px;}
+.fnote{font-size:11px;color:var(--tx3);margin-top:3px;}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:8px 14px;border-radius:var(--r);border:1px solid var(--bd2);background:var(--sf);color:var(--tx);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background .15s;}
+.btn:hover{background:var(--sf2);}.btn:disabled{opacity:.4;cursor:not-allowed;}
+.btn.pr{background:var(--gn);color:#fff;border-color:var(--gn);}.btn.pr:hover{background:var(--gn-dk);}
+.btn.dn{background:var(--rd);color:#fff;border-color:var(--rd);}
+.btn.wn{background:var(--am);color:#fff;border-color:var(--am);}
+.btn.mn{background:var(--pu);color:#fff;border-color:var(--pu);}
+.btn.tl{background:var(--tl);color:#fff;border-color:var(--tl);}
+.btn.bl{background:var(--bl);color:#fff;border-color:var(--bl);}
+.btn.sm{padding:5px 10px;font-size:12px;}.btn.xs{padding:3px 8px;font-size:11px;}
+.ibtn{background:none;border:none;cursor:pointer;color:var(--tx3);padding:3px 5px;border-radius:4px;font-size:14px;display:inline-flex;align-items:center;}
+.ibtn:hover{background:var(--sf2);color:var(--tx);}.ibtn.del:hover{color:var(--rd);}
+.rmbtn{background:none;border:none;cursor:pointer;color:var(--tx3);font-size:13px;padding:2px 3px;border-radius:3px;display:flex;align-items:center;}.rmbtn:hover{color:var(--rd);}
+.ahdr{background:var(--sf);border-bottom:1px solid var(--bd);padding:11px 15px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;position:sticky;top:0;z-index:50;box-shadow:var(--sh);}
+.atitle{font-size:17px;font-weight:600;}.hnav{display:flex;gap:6px;flex-wrap:wrap;}
+.abody{max-width:760px;margin:0 auto;padding:14px 13px 80px;}
+.sbar{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:11px 14px;margin-bottom:11px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;box-shadow:var(--sh);}
+.sdot{width:9px;height:9px;border-radius:50%;background:var(--bd2);display:inline-block;margin-right:6px;}.sdot.on{background:var(--gn);}
+.strow{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:11px;}
+@media(max-width:420px){.strow{grid-template-columns:repeat(2,1fr);}}
+.stcard{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:9px 11px;box-shadow:var(--sh);}
+.stlbl{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:2px;font-weight:500;}
+.stval{font-size:17px;font-weight:600;font-family:'DM Mono',monospace;}
+.actrow{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:11px;}
+.fcard{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:13px 14px;margin-bottom:11px;display:none;box-shadow:var(--sh);}
+.fcard.open{display:block;}
+.ftitle{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--tx2);margin-bottom:9px;}
+.frow{display:flex;gap:7px;align-items:flex-end;flex-wrap:wrap;}
+.fgrp{display:flex;flex-direction:column;gap:3px;flex:1;min-width:110px;}
+.facts{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap;}
+.subf{background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);padding:9px 11px;margin-top:7px;display:none;}
+.subf.open{display:block;}
+.subtit{font-size:11px;font-weight:600;margin-bottom:7px;}
+.pastnote{font-size:12px;color:var(--pu);margin-bottom:8px;line-height:1.5;}
+.matbtns{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px;}
+.lghdr{text-align:center;margin-bottom:13px;}
+.lgname{font-size:17px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;}
+.lgdate{font-size:16px;font-weight:500;margin-top:4px;}
+.slink{font-size:11px;color:var(--tx3);cursor:pointer;text-decoration:underline;font-weight:400;}
+.daysec{margin-bottom:11px;}
+.sechdr{display:flex;align-items:center;gap:9px;margin-bottom:7px;}
+.sectit{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--tx3);white-space:nowrap;}
+.secln{flex:1;height:1px;background:var(--bd);}
+.tl{display:flex;flex-direction:column;gap:5px;}
+.entry{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:8px 10px;display:flex;align-items:flex-start;gap:6px;box-shadow:var(--sh);}
+.entry.needsTime{border-color:var(--am);border-style:dashed;}
+.entry.manentry{border-color:#9b82e8;border-style:dashed;}
+.entry.editing{border-color:var(--bl);background:#f5f8fd;}
+.earr{display:flex;flex-direction:column;gap:0;flex-shrink:0;padding-top:1px;}
+/* Fix #6: arrow buttons never disabled based on section -- only disabled at absolute top/bottom of list */
+.arrbtn{background:none;border:none;cursor:pointer;color:var(--tx3);padding:2px 4px;font-size:13px;line-height:1.2;border-radius:3px;display:block;}
+.arrbtn:hover{background:var(--sf2);color:var(--tx);}
+.arrbtn:disabled{opacity:.2;cursor:default;}
+.edot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:5px;}
+.etime{font-size:11px;font-family:'DM Mono',monospace;color:var(--tx3);min-width:62px;flex-shrink:0;padding-top:2px;}
+.etime.needsT{color:var(--am);font-style:italic;}
+.ebody{flex:1;display:flex;flex-direction:column;gap:3px;}
+.emain{display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.elbl{font-size:13px;flex:1;}.etag{font-weight:600;}.enote{color:var(--tx2);}
+.eacts{display:flex;gap:2px;}
+.badges{display:flex;gap:4px;flex-wrap:wrap;}
+.badge{font-size:10px;padding:2px 7px;border-radius:99px;font-weight:500;}
+.b-in{background:var(--gn-bg);color:var(--gn-dk);}.b-out{background:var(--rd-bg);color:var(--rd);}
+.b-task{background:var(--bl-bg);color:var(--bl);}.b-break{background:var(--am-bg);color:var(--am);}
+.b-manual{background:var(--pu-bg);color:var(--pu);}.b-time{background:var(--am-bg);color:var(--am);font-style:italic;}
+.sec-toggle{font-size:11px!important;background:var(--am-bg)!important;border:1px solid var(--am)!important;border-radius:var(--r)!important;padding:2px 7px!important;cursor:pointer;color:var(--am)!important;white-space:nowrap;}
+.sec-toggle:hover{background:var(--am)!important;color:#fff!important;}
+.matnotes{display:flex;flex-wrap:wrap;gap:3px;}
+.mnt{font-size:11px;padding:2px 7px;border-radius:4px;border-left:2px solid;}
+.mnt.pur{background:var(--tl-bg);border-color:var(--tl);color:var(--tl);}
+.mnt.sup{background:var(--bl-bg);border-color:var(--bl);color:var(--bl);}
+.noent{font-size:13px;color:var(--tx3);text-align:center;padding:12px 0;}
+.sessdiv{font-size:10px;color:var(--tx3);text-align:center;padding:2px 0;}
+.editform{width:100%;padding-top:8px;border-top:1px solid var(--bd);margin-top:4px;display:flex;flex-direction:column;gap:8px;}
+.editrow{display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;}
+.egrp{display:flex;flex-direction:column;gap:3px;flex:1;min-width:100px;}
+.egrp label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--tx3);font-weight:500;}
+.egrp input,.egrp select{padding:5px 8px;font-size:12px;}
+.bgrid{display:flex;flex-direction:column;gap:9px;margin-top:11px;}
+.panel{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:12px;box-shadow:var(--sh);}
+.ptit{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--tx2);margin-bottom:9px;display:flex;align-items:center;justify-content:space-between;}
+.psub{font-size:11px;color:var(--tx3);margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid var(--bd);}
+.icols{display:grid;grid-template-columns:1fr 52px 72px 22px;gap:4px;}
+.icols.hdr span{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--tx3);}
+.irow{display:grid;grid-template-columns:1fr 52px 72px 22px;gap:4px;align-items:center;margin-bottom:4px;}
+.irow input{padding:5px 6px;font-size:12px;}
+.ptotal{font-size:12px;color:var(--tx2);text-align:right;margin-top:5px;padding-top:5px;border-top:1px solid var(--bd);font-weight:500;}
+.addrow{font-size:12px;color:var(--tx3);background:none;border:none;cursor:pointer;padding:4px 0;display:flex;align-items:center;gap:4px;margin-top:4px;}
+.addrow:hover{color:var(--tx);}
+.ctbl{width:100%;border-collapse:collapse;}
+.ctbl th{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--tx3);font-weight:500;padding:0 4px 6px;text-align:left;}
+.ctbl td{padding:3px 4px;}.ctbl td input{padding:5px 6px;font-size:12px;}
+.mat-sep{height:1px;background:var(--bd);margin:10px 0;}
+.hhdr{background:var(--sf);border-bottom:1px solid var(--bd);padding:11px 15px;display:flex;align-items:center;gap:11px;position:sticky;top:0;z-index:50;box-shadow:var(--sh);}
+.hbody{max-width:760px;margin:0 auto;padding:14px 13px 80px;}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:8px;margin-top:9px;}
+.dbtn{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:10px 12px;cursor:pointer;transition:background .15s;box-shadow:var(--sh);}
+.dbtn:hover{background:var(--sf2);}.dbtn.edit{border-color:var(--bl);}.dbtn.edit:hover{background:var(--bl-bg);}
+.dlbl{font-size:13px;font-weight:500;}.dsub{font-size:11px;color:var(--tx3);margin-top:2px;}.ddata{color:var(--gn);}
+.dvhdr{background:var(--sf);border-bottom:1px solid var(--bd);padding:11px 15px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;position:sticky;top:0;z-index:50;box-shadow:var(--sh);}
+.dvbody{max-width:760px;margin:0 auto;padding:14px 13px 80px;}
+.movl{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center;padding:14px;}
+.movl.open{display:flex;}
+.modal{background:var(--sf);border-radius:var(--rl);border:1px solid var(--bd);padding:19px;width:100%;max-width:360px;display:flex;flex-direction:column;gap:13px;box-shadow:0 8px 32px rgba(0,0,0,.14);}
+.modal h3{font-size:16px;font-weight:600;}.mbtns{display:flex;gap:8px;justify-content:flex-end;}
+.mprev{font-size:19px;font-weight:600;text-align:center;min-height:28px;padding:5px 0;}
+
+/* == PRINT == */
+@media print{
+  *{box-sizing:border-box;}
+  body{background:#fff;font-family:Arial,Helvetica,sans-serif;color:#000;margin:0;padding:0;}
+  .page,.ahdr,.actrow,.fcard,.hnav,.dvhdr,.sbar,.strow,.lghdr .slink,.earr,.eacts,.ibtn,.rmbtn,.addrow,.no-print{display:none!important;}
+  #printSheet{display:flex!important;flex-direction:column;overflow:hidden;}
+  @page{size:letter portrait;margin:0.25in;}
+  #printSheet{width:100%;}
+  /* psScale is the scaleable wrapper -- JS sets transform:scale() here */
+  #psScale{transform-origin:top left;display:flex;flex-direction:column;}
+  /* Header */
+  .ps-hdr{display:grid;grid-template-columns:1fr 1fr 1fr;border:1.5px solid #000;}
+  .ps-hcell{padding:3px 6px;border-right:1px solid #000;}
+  .ps-hcell:last-child{border-right:none;}
+  .ps-hlbl{font-size:6pt;font-weight:bold;text-transform:uppercase;letter-spacing:.04em;color:#555;}
+  .ps-hval{font-size:11pt;font-weight:bold;margin-top:0;}
+  /* Two-column body */
+  .ps-body{display:grid;grid-template-columns:52% 48%;border-left:1.5px solid #000;border-right:1.5px solid #000;border-bottom:1.5px solid #000;flex:1;}
+  /* Left column */
+  .ps-left{border-right:1px solid #000;display:flex;flex-direction:column;min-height:100%;}
+  .ps-slbl{font-size:6pt;font-weight:bold;text-transform:uppercase;letter-spacing:.05em;padding:2px 5px 1px;color:#333;border-bottom:0.5px solid #ccc;background:#f8f8f8;}
+  .ps-entries{flex:1;}
+  .ps-erow{display:grid;grid-template-columns:50px 1fr;border-bottom:0.5px solid #eee;}
+  .ps-et{font-size:6.5pt;font-family:'Courier New',monospace;color:#555;padding:1px 3px 1px 4px;border-right:0.5px solid #ddd;line-height:1.3;}
+  .ps-et.pend{color:#b05008;font-style:italic;}
+  .ps-el{font-size:7pt;padding:1px 4px;line-height:1.3;}
+  .ps-etag{font-weight:bold;display:inline;}
+  .ps-enote{color:#444;display:inline;}
+  .ps-emat{font-size:5.5pt;padding:0px 3px;border-radius:2px;border-left:1.5px solid #888;display:inline-block;margin:1px 0;}
+  .ps-emat.pur{border-color:#0d6e6e;color:#0d6e6e;background:#eaf7f7;}
+  .ps-emat.sup{border-color:#1a4f7a;color:#1a4f7a;background:#e8f1fb;}
+  /* Client table -- left side */
+  .ps-cli-left{border-top:1px solid #000;}
+  .ps-cli-left table{width:100%;border-collapse:collapse;}
+  .ps-cli-left th{font-weight:bold;text-transform:uppercase;font-size:5.5pt;padding:1px 4px;border-bottom:0.5px solid #ccc;border-right:0.5px solid #ddd;text-align:left;}
+  .ps-cli-left td{font-size:6.5pt;padding:1px 4px;border-bottom:0.5px solid #eee;border-right:0.5px solid #ddd;}
+  .ps-cli-left tr:last-child td{border-bottom:none;}
+  /* Totals row */
+  .ps-tots{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid #000;}
+  .ps-tcell{padding:2px 4px;border-right:0.5px solid #ccc;}.ps-tcell:last-child{border-right:none;}
+  .ps-tlbl{font-size:5.5pt;font-weight:bold;text-transform:uppercase;color:#666;}
+  .ps-tval{font-size:8.5pt;font-weight:bold;font-family:'Courier New',monospace;}
+  /* Right column */
+  .ps-right{display:flex;flex-direction:column;min-height:100%;}
+  .ps-rsec{border-bottom:0.5px solid #000;display:flex;flex-direction:column;flex-shrink:0;}
+  .ps-rsec:last-child{border-bottom:none;}
+  .ps-mrow{display:grid;grid-template-columns:1fr 24px 40px 40px;border-bottom:0.5px solid #eee;}
+  .ps-mrow.hdr span{font-size:5.5pt;font-weight:bold;text-transform:uppercase;color:#555;padding:1px 3px;border-right:0.5px solid #ddd;}
+  .ps-mrow.hdr span:last-child{border-right:none;}
+  .ps-mc{font-size:6.5pt;padding:1px 3px;border-right:0.5px solid #ddd;word-break:break-word;line-height:1.3;}
+  .ps-mc:last-child{border-right:none;}
+  .ps-mtot{font-size:6.5pt;font-weight:bold;text-align:right;padding:1px 4px;border-top:0.5px solid #ccc;}
+  /* Notes */
+  .ps-notes{border-top:1px solid #000;flex:1;display:flex;flex-direction:column;}
+  .ps-nbody{font-size:7pt;padding:3px 5px;white-space:pre-wrap;line-height:1.4;flex:1;}
+  .ps-nlines{flex:1;min-height:30px;background-image:repeating-linear-gradient(to bottom,transparent,transparent 14px,#ddd 14px,#ddd 15px);background-size:100% 15px;}
+}
+#printSheet{display:none;}
+/* -- Simplified View -- */
+.sv-wrap{max-width:420px;margin:0 auto;padding:24px 16px;display:flex;flex-direction:column;gap:16px;align-items:center;}
+.sv-header{text-align:center;}
+.sv-name{font-size:28px;font-weight:700;transition:color .2s;}
+.sv-date{font-size:15px;color:var(--tx2);margin-top:4px;}
+.sv-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;max-width:380px;}
+.sv-stat{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:14px 16px;box-shadow:var(--sh);}
+.sv-slbl{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:4px;font-weight:500;}
+.sv-sval{font-size:26px;font-weight:700;font-family:'DM Mono',monospace;}
+.sv-status{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:12px 16px;width:100%;max-width:380px;text-align:center;box-shadow:var(--sh);}
+.sv-sdot{width:10px;height:10px;border-radius:50%;background:var(--bd2);display:inline-block;margin-right:8px;vertical-align:middle;}
+.sv-sdot.on{background:var(--gn);}
+.sv-btns{display:flex;flex-direction:column;gap:10px;width:100%;max-width:380px;}
+.sv-btn{width:100%;padding:16px;font-size:17px;font-weight:600;border-radius:var(--rl);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:opacity .15s,transform .1s;font-family:inherit;}
+.sv-btn:active{transform:scale(.97);}
+.sv-btn:disabled{opacity:.35;cursor:not-allowed;}
+.sv-btn.clockin{background:var(--gn);color:#fff;}
+.sv-btn.logact{background:var(--am);color:#fff;}
+.sv-btn.clockout{background:var(--rd);color:#fff;}
+.sv-log-form{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:16px;width:100%;max-width:380px;box-shadow:var(--sh);display:none;}
+.sv-log-form.open{display:block;}
+/* -- More menu -- */
+.more-modal{display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.3);}
+.more-modal.open{display:flex;align-items:flex-start;justify-content:flex-end;padding:56px 12px 0;}
+.more-panel{background:var(--sf);border:1px solid var(--bd2);border-radius:var(--rl);
+  box-shadow:0 6px 24px rgba(0,0,0,.18);min-width:200px;overflow:hidden;}
+.more-item{display:flex;align-items:center;gap:10px;padding:13px 16px;font-size:14px;
+  font-weight:500;color:var(--tx);cursor:pointer;border:none;background:none;
+  width:100%;text-align:left;font-family:inherit;border-bottom:1px solid var(--bd);}
+.more-item:last-child{border-bottom:none;}
+.more-item:hover,.more-item:active{background:var(--sf2);}
+.more-item .mi-icon{font-size:17px;width:24px;text-align:center;}
+.sv-lf-title{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx2);margin-bottom:12px;}
+.view-toggle{display:flex;gap:0;border:1px solid var(--bd2);border-radius:var(--r);overflow:hidden;background:var(--sf);}
+.vt-btn{padding:6px 14px;font-size:12px;font-weight:500;background:none;border:none;cursor:pointer;color:var(--tx2);font-family:inherit;transition:background .15s;}
+.vt-btn.active{background:var(--bl);color:#fff;}
+/* -- Category Manager -- */
+.catman-btn{font-size:11px;color:var(--tx3);background:none;border:none;cursor:pointer;padding:2px 4px;text-decoration:underline;font-family:inherit;}
+.catman-btn:hover{color:var(--tx);}
+.catrow{display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--bd);}
+.catrow:last-child{border-bottom:none;}
+.catrow-name{flex:1;font-size:13px;}
+.catdel{background:none;border:none;cursor:pointer;color:var(--tx3);font-size:13px;padding:2px 5px;border-radius:4px;}
+.catdel:hover{color:var(--rd);background:var(--rd-bg);}
+.catadd{display:flex;gap:6px;margin-top:9px;}
+.catadd input{flex:1;}
+
+/* == LOCATION VIEW == */
+.lv-wrap{max-width:760px;margin:0 auto;padding:14px 13px 80px;}
+.lv-empty{text-align:center;padding:48px 16px;color:var(--tx3);font-size:14px;}
+.lv-date-group{margin-bottom:18px;}
+.lv-date-hdr{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--tx3);padding:4px 0 8px;display:flex;align-items:center;gap:9px;}
+.lv-date-hdr .secln{flex:1;height:1px;background:var(--bd);}
+.lv-entry{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);box-shadow:var(--sh);margin-bottom:6px;overflow:hidden;cursor:pointer;transition:border-color .15s;}
+.lv-entry:hover{border-color:var(--tl);}
+.lv-entry.open{border-color:var(--tl);}
+.lv-row{display:flex;align-items:center;gap:10px;padding:9px 12px;}
+.lv-time{font-size:11px;font-family:'DM Mono',monospace;color:var(--tx3);min-width:62px;flex-shrink:0;}
+.lv-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.lv-addr{font-size:13px;flex:1;color:var(--tx);font-weight:500;}
+.lv-addr-link{font-size:13px;flex:1;color:var(--bl);font-weight:500;text-decoration:none;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lv-addr-link:hover,.lv-addr-link:active{text-decoration:underline;}
+.lv-type{font-size:10px;padding:2px 7px;border-radius:99px;font-weight:500;flex-shrink:0;}
+.lv-chevron{font-size:11px;color:var(--tx3);flex-shrink:0;transition:transform .2s;}
+.lv-entry.open .lv-chevron{transform:rotate(90deg);}
+.lv-detail{display:none;padding:0 12px 12px;border-top:1px solid var(--bd);background:var(--sf2);}
+.lv-entry.open .lv-detail{display:block;}
+.lv-map{width:100%;border-radius:var(--r);overflow:hidden;margin-bottom:9px;margin-top:10px;}
+.lv-map img{width:100%;height:100%;object-fit:cover;display:block;}
+.lv-map-err{width:100%;height:180px;border-radius:var(--r);background:var(--sf2);border:1px solid var(--bd);display:flex;align-items:center;justify-content:center;color:var(--tx3);font-size:12px;margin-bottom:9px;margin-top:10px;}
+.lv-detail-addr{font-size:13px;color:var(--tx);margin-bottom:5px;font-weight:500;}
+.lv-gps-link{font-size:12px;color:var(--bl);text-decoration:none;}
+.lv-gps-link:hover{text-decoration:underline;}
+.lv-note{font-size:12px;color:var(--tx2);margin-top:5px;font-style:italic;}
+.lv-mile-summary{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.lv-mile-auto{font-size:13px;color:var(--tx2);}
+.lv-mile-auto strong{color:var(--tx);font-weight:600;}
+.lv-trips-hdr{display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;}
+.lv-trips-hdr-lbl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--tx3);}
+.lv-trip-entry{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:9px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;}
+.lv-trip-dist{font-size:15px;font-weight:600;color:var(--tx);min-width:58px;flex-shrink:0;}
+.lv-trip-route{font-size:13px;color:var(--tx);flex:1;}
+.lv-trip-purpose{font-size:11px;color:var(--tx3);margin-top:2px;}
+.lv-trip-del{font-size:12px;color:var(--tx3);cursor:pointer;padding:2px 6px;border-radius:var(--r);border:1px solid var(--bd);background:var(--sf2);flex-shrink:0;}
+.lv-trip-del:hover{color:var(--rd);border-color:var(--rd);}
+.lv-trip-total{font-size:13px;font-weight:600;color:var(--tx);text-align:right;padding:4px 0 8px;}
+</style>
+</head>
+<body>
+<div id="printSheet"><div id="psScale"></div></div>
+
+<!-- WELCOME -->
+<div class="page" id="pgWelcome">
+  <div style="font-size:52px;"></div>
+  <div style="font-size:26px;font-weight:700;">Work Timesheet</div>
+  <div style="font-size:14px;color:var(--tx2);">Track your day . log activities . manage materials</div>
+  <div class="wcard">
+    <div><div class="flbl">Your name</div><input type="text" id="wName" placeholder="e.g. Bobby Builder" oninput="wPrev()" onkeydown="if(event.key==='Enter')startApp()"></div>
+    <div><div class="flbl">Name colour <span style="font-weight:400;opacity:.6;">(optional)</span></div><div class="swatches" id="wSwatches"></div><div class="fnote">Leave unselected for default</div></div>
+    <div class="cprev" id="wCprev"></div>
+    <button class="btn pr" onclick="startApp()" style="justify-content:center;width:100%;">Get started -></button>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="page" id="pgApp">
+  <div class="ahdr no-print">
+    <div class="atitle" id="appTitle">Timesheet</div>
+    <div class="hnav">
+      <div class="view-toggle no-print">
+        <button class="vt-btn active" id="vtSimple" onclick="setView('simple')">Simple View</button>
+        <button class="vt-btn" id="vtFull" onclick="setView('full')">Details View</button>
+        <button class="vt-btn" id="vtLoc" onclick="setView('loc')">&#128205; Locations</button>
+      </div>
+      <button class="btn sm no-print" onclick="toggleMoreMenu()" title="More options" style="padding:5px 11px;font-size:16px;letter-spacing:2px;line-height:1;">&#8943;</button>
+    </div>
+  </div>
+  <div class="abody" id="abody">
+    <div style="text-align:right;margin-bottom:6px;display:flex;justify-content:flex-end;gap:8px;">
+      <button class="catman-btn" onclick="openCliPresetModal()" style="font-size:12px;padding:3px 8px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);">&#128203; Clients</button>
+      <button class="catman-btn" onclick="openCatModal()" style="font-size:12px;padding:3px 8px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);">&#9776; Categories</button>
+    </div>
+    <div class="sbar"><div><span class="sdot" id="sdot"></span><span id="stxt" style="font-size:14px;font-weight:500;"></span></div><div id="clk" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--tx3);">--:--:--</div></div>
+    <div class="strow">
+      <div class="stcard"><div class="stlbl">Start</div><div class="stval" id="sIn">--:--</div></div>
+      <div class="stcard"><div class="stlbl">End</div><div class="stval" id="sOut">--:--</div></div>
+      <div class="stcard"><div class="stlbl">Total</div><div class="stval" id="sTotal">0h 0m</div></div>
+      <div class="stcard"><div class="stlbl">Sessions</div><div class="stval" id="sSess">0</div></div>
+    </div>
+    <div class="actrow no-print">
+      <button class="btn pr" id="btnIn" onclick="clockIn()">&#9654; Clock in</button>
+      <button class="btn wn" id="btnLog" onclick="openF('lf')" disabled>+ Log activity</button>
+      <button class="btn mn" id="btnPast" onclick="openF('mf')">+ Add manual entry</button>
+      <button class="btn dn" id="btnOut" onclick="clockOut()" disabled>&#9632; Clock out</button>
+    </div>
+    <div class="fcard" id="lf">
+      <div class="ftitle">Log an activity</div>
+      <div class="frow">
+        <div class="fgrp"><div class="flbl">Category</div><select id="lfC"><option value="">-- pick --</option><option>Emails / admin</option><option>Job site inspection</option><option>Client meeting</option><option>Driving / travel</option><option>Break</option><option>Lunch</option><option>Loading / unloading</option><option>Other</option></select></div>
+        <div class="fgrp"><div class="flbl">Note (optional)</div><input type="text" id="lfN" placeholder="drove to the shop, called manager"></div>
+      </div>
+      <div class="matbtns"><button class="btn tl xs" onclick="togSub('lfPS')">&#128722; Add purchase</button><button class="btn bl xs" onclick="togSub('lfSS')">&#128230; Add supply</button><button class="btn mn xs" onclick="togSub('lfCL');buildClientBtns('lf')">+ Client</button></div>
+      <div class="subf" id="lfPS"><div class="subtit" style="color:var(--tl);">&#128722; Purchase</div><div class="frow"><div class="fgrp"><div class="flbl">Item</div><input type="text" id="lfPI" placeholder="Description"></div><div class="fgrp" style="max-width:72px;"><div class="flbl">Qty</div><input type="number" id="lfPQ" min="0" step="1" placeholder="1"></div><div class="fgrp" style="max-width:82px;"><div class="flbl">Unit $</div><input type="number" id="lfPA" min="0" step="0.01" placeholder="0.00"></div></div></div>
+      <div class="subf" id="lfSS"><div class="subtit" style="color:var(--bl);">&#128230; Supply</div><div class="frow"><div class="fgrp"><div class="flbl">Item</div><input type="text" id="lfSI" placeholder="Description"></div><div class="fgrp" style="max-width:72px;"><div class="flbl">Qty</div><input type="number" id="lfSQ" min="0" step="1" placeholder="1"></div><div class="fgrp" style="max-width:82px;"><div class="flbl">Unit $</div><input type="number" id="lfSA" min="0" step="0.01" placeholder="0.00"></div></div></div>
+      <div class="subf" id="lfCL">
+        <div class="subtit" style="color:var(--pu);">Assign to client</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;" id="lfCLbtns"></div>
+        <div class="frow">
+          <div class="fgrp"><div class="flbl">Client name</div><input type="text" id="lfCLn" placeholder="or type custom name"></div>
+          <div class="fgrp" style="max-width:100px;"><div class="flbl">Project</div><input type="text" id="lfCLp" placeholder="Project"></div>
+          <div class="fgrp" style="max-width:72px;"><div class="flbl">Hours</div><input type="number" id="lfCLh" min="0" step="0.5" placeholder="0"></div>
+        </div>
+      </div>
+      <div class="facts"><button class="btn pr sm" onclick="submitE('lf')">Add</button><button class="btn sm" onclick="closeF('lf')">Cancel</button></div>
+    </div>
+    <div class="fcard" id="mf">
+      <div class="ftitle">Add a manual entry</div>
+      <div class="pastnote"> Leave time blank -> freely moveable with &#9650;&#9660; into any section. Enter time -> auto-sorts.</div>
+      <div class="frow">
+        <div class="fgrp" style="max-width:150px;"><div class="flbl">Time <span style="font-weight:400;opacity:.6;">(optional)</span></div><input type="time" id="mfT"><div class="fnote">Blank = no time set</div></div>
+        <div class="fgrp"><div class="flbl">Category</div><select id="mfC"><option value="">-- pick --</option><option>Emails / admin</option><option>Job site inspection</option><option>Client meeting</option><option>Driving / travel</option><option>Break</option><option>Lunch</option><option>Loading / unloading</option><option>Other</option></select></div>
+        <div class="fgrp"><div class="flbl">Note (optional)</div><input type="text" id="mfN" placeholder="drove to the shop, called manager"></div>
+      </div>
+      <div class="matbtns"><button class="btn tl xs" onclick="togSub('mfPS')">&#128722; Add purchase</button><button class="btn bl xs" onclick="togSub('mfSS')">&#128230; Add supply</button><button class="btn mn xs" onclick="togSub('mfCL');buildClientBtns('mf')">+ Client</button></div>
+      <div class="subf" id="mfPS"><div class="subtit" style="color:var(--tl);">&#128722; Purchase</div><div class="frow"><div class="fgrp"><div class="flbl">Item</div><input type="text" id="mfPI" placeholder="Description"></div><div class="fgrp" style="max-width:72px;"><div class="flbl">Qty</div><input type="number" id="mfPQ" min="0" step="1" placeholder="1"></div><div class="fgrp" style="max-width:82px;"><div class="flbl">Unit $</div><input type="number" id="mfPA" min="0" step="0.01" placeholder="0.00"></div></div></div>
+      <div class="subf" id="mfSS"><div class="subtit" style="color:var(--bl);">&#128230; Supply</div><div class="frow"><div class="fgrp"><div class="flbl">Item</div><input type="text" id="mfSI" placeholder="Description"></div><div class="fgrp" style="max-width:72px;"><div class="flbl">Qty</div><input type="number" id="mfSQ" min="0" step="1" placeholder="1"></div><div class="fgrp" style="max-width:82px;"><div class="flbl">Unit $</div><input type="number" id="mfSA" min="0" step="0.01" placeholder="0.00"></div></div></div>
+      <div class="subf" id="mfCL">
+        <div class="subtit" style="color:var(--pu);">Assign to client</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;" id="mfCLbtns"></div>
+        <div class="frow">
+          <div class="fgrp"><div class="flbl">Client name</div><input type="text" id="mfCLn" placeholder="or type custom name"></div>
+          <div class="fgrp" style="max-width:100px;"><div class="flbl">Project</div><input type="text" id="mfCLp" placeholder="Project"></div>
+          <div class="fgrp" style="max-width:72px;"><div class="flbl">Hours</div><input type="number" id="mfCLh" min="0" step="0.5" placeholder="0"></div>
+        </div>
+      </div>
+      <div class="facts"><button class="btn pr sm" onclick="submitE('mf')">Add</button><button class="btn sm" onclick="closeF('mf')">Cancel</button></div>
+    </div>
+    <div class="lghdr"><div class="lgname"><span id="lgName">Today's log</span><span class="slink" onclick="openNM()"> edit</span></div><div class="lgdate" id="lgDate"></div></div>
+    <div id="tlWrap"></div>
+    <div class="bgrid">
+      <div class="panel">
+        <div class="ptit">Materials &amp; Resources</div>
+        <div class="psub">&#128722; Purchases -- bought for job</div>
+        <div class="icols hdr" style="margin-bottom:4px;"><span>Item description</span><span>Qty</span><span>Unit $</span><span></span></div>
+        <div id="purL"></div><button class="addrow" onclick="addPur()">+ Add purchase</button>
+        <div class="ptotal" id="purTot"></div>
+        <div class="mat-sep"></div>
+        <div class="psub">&#128230; Supplies used -- from inventory/shop</div>
+        <div class="icols hdr" style="margin-bottom:4px;"><span>Item description</span><span>Qty</span><span>Unit $</span><span></span></div>
+        <div id="supL"></div><button class="addrow" onclick="addSup()">+ Add supply</button>
+        <div class="ptotal" id="supTot"></div>
+      </div>
+      <div class="panel">
+        <div class="ptit">Client / Project</div>
+        <table class="ctbl"><thead><tr><th>Client</th><th>Project</th><th>Billable hrs</th><th></th></tr></thead><tbody id="cliB"></tbody></table>
+        <button class="addrow" onclick="addCli()">+ Add row</button>
+        <div class="ptotal" id="cliTot"></div>
+      </div>
+      <div class="panel"><div class="ptit">End of day notes / summary</div><textarea id="dayN" placeholder="Summary of the day, outstanding tasks, notes for tomorrow..." oninput="S.notes=this.value;save()"></textarea></div>
+    </div>
+  </div>
+
+  <!-- Simplified View -->
+  <div id="svWrap" style="display:none;" class="no-print">
+  <div class="sv-wrap">
+    <!-- 1. Buttons -->
+    <div style="width:100%;max-width:380px;display:flex;justify-content:flex-end;gap:8px;margin-bottom:4px;">
+      <button class="catman-btn" onclick="openCliPresetModal()" style="font-size:12px;padding:3px 6px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);">&#128203; Clients</button>
+      <button class="catman-btn" onclick="openCatModal()" style="font-size:12px;padding:3px 6px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);">&#9776; Categories</button>
+    </div>
+    <div class="sv-btns" style="width:100%;max-width:380px;">
+      <button class="sv-btn clockin" id="svBtnIn" onclick="svClockIn()">&#9654; Clock in</button>
+      <button class="sv-btn logact" id="svBtnLog" onclick="svOpenLog()" style="display:none;">+ Log activity</button>
+      <button class="sv-btn clockout" id="svBtnOut" onclick="svClockOut()" style="display:none;">&#9632; Clock out</button>
+    </div>
+    <!-- 2. Log form -- hidden, opens right below buttons -->
+    <div class="sv-log-form" id="svLogForm">
+      <div class="sv-lf-title">Log an activity</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div>
+          <div class="flbl">Category</div>
+          <select id="svCat">
+            <option value="">-- pick category --</option>
+            <option>Emails / admin</option><option>Job site inspection</option>
+            <option>Client meeting</option><option>Driving / travel</option>
+            <option>Break</option><option>Lunch</option>
+            <option>Loading / unloading</option><option>Other</option>
+          </select>
+        </div>
+        <div>
+          <div class="flbl">Note (optional)</div>
+          <input type="text" id="svNote" placeholder="drove to the shop, called manager">
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn tl sm" onclick="togSub('svPS')">Add Purchase</button>
+          <button class="btn bl sm" onclick="togSub('svSS')">Add Supply</button>
+          <button class="btn mn sm" onclick="togSub('svCL');buildClientBtns('sv')">+ Client</button>
+        </div>
+        <div class="subf" id="svPS">
+          <div class="subtit" style="color:var(--tl);">Purchase</div>
+          <div class="frow">
+            <div class="fgrp"><div class="flbl">Item</div><input type="text" id="svPI" placeholder="Description"></div>
+            <div class="fgrp" style="max-width:72px;"><div class="flbl">Qty</div><input type="number" id="svPQ" min="0" step="1" placeholder="1"></div>
+            <div class="fgrp" style="max-width:82px;"><div class="flbl">Unit $</div><input type="number" id="svPA" min="0" step="0.01" placeholder="0.00"></div>
+          </div>
+        </div>
+        <div class="subf" id="svSS">
+          <div class="subtit" style="color:var(--bl);">Supply</div>
+          <div class="frow">
+            <div class="fgrp"><div class="flbl">Item</div><input type="text" id="svSI" placeholder="Description"></div>
+            <div class="fgrp" style="max-width:72px;"><div class="flbl">Qty</div><input type="number" id="svSQ" min="0" step="1" placeholder="1"></div>
+            <div class="fgrp" style="max-width:82px;"><div class="flbl">Unit $</div><input type="number" id="svSA" min="0" step="0.01" placeholder="0.00"></div>
+          </div>
+        </div>
+        <div class="subf" id="svCL">
+          <div class="subtit" style="color:var(--pu);">Assign to client</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;" id="svCLbtns"></div>
+          <div class="frow">
+            <div class="fgrp"><div class="flbl">Client</div><input type="text" id="svCLn" placeholder="or type custom name"></div>
+            <div class="fgrp" style="max-width:100px;"><div class="flbl">Project</div><input type="text" id="svCLp" placeholder="Project"></div>
+            <div class="fgrp" style="max-width:72px;"><div class="flbl">Hours</div><input type="number" id="svCLh" min="0" step="0.5" placeholder="0"></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn pr" style="flex:1;justify-content:center;" onclick="svSubmitLog()">Add</button>
+          <button class="btn" onclick="svCloseLog()">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <!-- 3. Name and date -->
+    <div class="sv-header" style="width:100%;max-width:380px;text-align:center;padding:6px 0 2px;">
+      <div class="sv-name" id="svName">Name</div>
+      <div class="sv-date" id="svDate"></div>
+    </div>
+    <!-- 4. Status dot -->
+    <div class="sv-status" id="svStatus" style="width:100%;max-width:380px;">
+      <span class="sv-sdot" id="svDot"></span><span id="svStxt">Not clocked in</span>
+    </div>
+    <!-- 5. Stats (shown after clock-in) -->
+    <div class="sv-stats" id="svStats" style="display:none;">
+      <div class="sv-stat"><div class="sv-slbl">Start</div><div class="sv-sval" id="svIn">--:--</div></div>
+      <div class="sv-stat"><div class="sv-slbl">End</div><div class="sv-sval" id="svOut">--:--</div></div>
+      <div class="sv-stat"><div class="sv-slbl">Total</div><div class="sv-sval" id="svTotal">0h 0m</div></div>
+      <div class="sv-stat"><div class="sv-slbl">Sessions</div><div class="sv-sval" id="svSess">0</div></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- HISTORY -->
+<div class="page" id="pgHist">
+  <div class="hhdr no-print"><button class="btn sm" onclick="goApp()"><- Back</button><strong>History</strong></div>
+  <div class="hbody"><div class="panel"><div style="font-size:13px;font-weight:500;margin-bottom:2px;">Select a day to view</div><div style="font-size:12px;color:var(--tx3);margin-bottom:9px;">Blue border = editable (within 2 weeks). Older = view only.</div><div class="dgrid" id="dGrid"></div></div></div>
+</div>
+
+<!-- DAY VIEW -->
+<div class="page" id="pgDV">
+  <div class="dvhdr no-print">
+    <button class="btn sm" onclick="goHist()"><- Back</button>
+    <strong id="dvTit">Day</strong>
+    <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;">
+      <button class="btn sm" id="dvEBtn" style="display:none;" onclick="dvEdit()"> Edit</button>
+      <button class="btn sm" onclick="doCSV(dvK)"> CSV</button>
+      <button class="btn sm" onclick="doPrint(dvK)">&#128424; Print</button>
+    </div>
+  </div>
+  <div class="dvbody" id="dvB"></div>
+</div>
+
+<!-- LOCATION VIEW (inside pgApp, toggled by setView) -->
+<div id="lvWrap" style="display:none;">
+  <div class="lv-wrap" id="lvBody"></div>
+</div>
+
+<!-- TRIP LOG MODAL -->
+<div class="movl" id="tripModal" onclick="if(event.target===this)closeTripModal()">
+  <div class="modal" style="max-width:400px;gap:12px;">
+    <h3>&#128663; Log a trip</h3>
+    <div class="fgrp"><div class="flbl">From</div><input type="text" id="tripFrom" placeholder="Start location or address"></div>
+    <div class="fgrp"><div class="flbl">To</div><input type="text" id="tripTo" placeholder="End location or address"></div>
+    <div style="display:flex;gap:10px;">
+      <div class="fgrp" style="flex:1;"><div class="flbl">Distance</div><input type="number" id="tripDist" min="0" step="0.1" placeholder="0.0"></div>
+      <div class="fgrp" style="width:80px;"><div class="flbl">Unit</div>
+        <select id="tripUnit"><option value="km">km</option><option value="mi">mi</option></select>
+      </div>
+    </div>
+    <div class="fgrp"><div class="flbl">Purpose (optional)</div><input type="text" id="tripPurpose" placeholder="e.g. Drive to jobsite, client visit"></div>
+    <div class="mbtns">
+      <button class="btn sm" onclick="closeTripModal()">Cancel</button>
+      <button class="btn pr sm" onclick="saveTripEntry()">Save trip</button>
+    </div>
+  </div>
+</div>
+
+<!-- NAME MODAL -->
+<div class="movl" id="nmovl">
+  <div class="modal">
+    <h3>Update name &amp; colour</h3>
+    <div><div class="flbl">Name</div><input type="text" id="nmN" oninput="nmPrev()"></div>
+    <div><div class="flbl">Colour</div><div class="swatches" id="nmSw"></div></div>
+    <div class="mprev" id="nmPrv"></div>
+    <div class="mbtns"><button class="btn sm" onclick="closeNM()">Cancel</button><button class="btn pr sm" onclick="saveNM()">Save</button></div>
+  </div>
+</div>
+
+<!-- MORE MENU MODAL -->
+<div class="more-modal" id="moreModal" onclick="if(event.target===this)closeMoreMenu()">
+  <div class="more-panel">
+    <button class="more-item" onclick="goHist();closeMoreMenu()"><span class="mi-icon">&#128197;</span>History</button>
+    <button class="more-item" onclick="doCSV(todayKey());closeMoreMenu()"><span class="mi-icon">&#8595;</span>Print as CSV</button>
+    <button class="more-item" onclick="doPrint(todayKey());closeMoreMenu()"><span class="mi-icon">&#128438;</span>Print as PDF</button>
+  </div>
+</div>
+
+<!-- CATEGORY MANAGER MODAL -->
+<div class="movl" id="catModal">
+  <div class="modal" style="max-width:400px;">
+    <h3>Manage categories</h3>
+    <div style="font-size:12px;color:var(--tx3);margin-top:-8px;margin-bottom:4px;">Add, remove or reorder your categories.</div>
+    <div id="catList" style="max-height:300px;overflow-y:auto;"></div>
+    <div class="catadd">
+      <input type="text" id="catNewInput" placeholder="New category name" onkeydown="if(event.key==='Enter')catAdd()">
+      <button class="btn pr sm" onclick="catAdd()">+ Add</button>
+    </div>
+    <div class="mbtns" style="margin-top:12px;"><button class="btn pr sm" onclick="closeCatModal()">Done</button></div>
+  </div>
+</div>
+
+<!-- CLIENT PRESET MANAGER MODAL -->
+<div class="movl" id="cliPresetModal">
+  <div class="modal" style="max-width:400px;">
+    <h3>Manage clients</h3>
+    <div style="font-size:12px;color:var(--tx3);margin-top:-8px;margin-bottom:4px;">Edit, add or remove your client preset buttons.</div>
+    <div id="cliPresetList" style="max-height:300px;overflow-y:auto;"></div>
+    <div class="catadd">
+      <input type="text" id="cliPresetNewInput" placeholder="New client name" onkeydown="if(event.key==='Enter')cliPresetAdd()">
+      <button class="btn pr sm" onclick="cliPresetAdd()">+ Add</button>
+    </div>
+    <div class="mbtns" style="margin-top:12px;"><button class="btn pr sm" onclick="closeCliPresetModal()">Done</button></div>
+  </div>
+</div>
+
+<!-- LOCATION DETAIL MODAL -->
+<div class="movl" id="locModal" onclick="if(event.target===this)closeLocModal()">
+  <div class="modal" style="max-width:360px;gap:10px;">
+    <h3>&#128205; Location</h3>
+    <div id="locModalAddr" style="font-size:14px;color:var(--tx);line-height:1.5;"></div>
+    <div style="font-size:12px;color:var(--tx3);">GPS: <a id="locModalMap" href="#" target="_blank" style="color:var(--bl);"></a></div>
+    <div class="mbtns"><button class="btn pr sm" onclick="closeLocModal()">Close</button></div>
+  </div>
+</div>
+
+<script>
+// Categories -- loaded from storage, fall back to defaults
+var DEFAULT_CATS=['Admin','Call','Email','Meeting','Job site inspection','Driving / travel','Lunch','Loading / unloading','Other'];
+var CATS=DEFAULT_CATS.slice();
+function loadCats(){
+  var raw=_lsGet('ts_cats');
+  if(raw){try{var arr=JSON.parse(raw);if(arr&&arr.length)CATS=arr;}catch(e){}}
+}
+function saveCats(){_lsSet('ts_cats',JSON.stringify(CATS));}
+
+// Client presets -- editable site/office names
+var DEFAULT_CLIENTS=['Shop','Office','Jobsite 1','Jobsite 2'];
+var CLIENT_PRESETS=DEFAULT_CLIENTS.slice();
+function loadClientPresets(){
+  var raw=_lsGet('ts_client_presets');
+  if(raw){try{var arr=JSON.parse(raw);if(arr&&arr.length)CLIENT_PRESETS=arr;}catch(e){}}
+}
+function saveClientPresets(){_lsSet('ts_client_presets',JSON.stringify(CLIENT_PRESETS));}
+const EDOT={'clock-in':'#2a6e4a','clock-out':'#952020','task':'#1a4f7a','break':'#b05008'};
+const ELAB={'clock-in':'Clock in','clock-out':'Clock out','task':'Activity','break':'Break'};
+const BRK=['break','lunch'];
+const SWS=[{l:'Default',h:''},{l:'Sky',h:'#3a9fd6'},{l:'Mint',h:'#27996a'},{l:'Coral',h:'#d96040'},{l:'Gold',h:'#c49010'},{l:'Lavender',h:'#6e5ec0'},{l:'Rose',h:'#c24470'},{l:'Lime',h:'#5ea020'}];
+
+// State: entries are flat array ordered by display position.
+// Each entry has a stable uid, section ('morning'|'afternoon'), needsTime flag.
+// Arrow moves work on array indices only -- no section filtering.
+let S={clocked:false,entries:[],purchases:[],supplies:[],clients:[],notes:'',trips:[]};
+let empName='',empColor='',wColor='',nmColor='';
+let editUid=null; // use stable uid instead of index to avoid skipping bug
+let dvK='',dvEditable=false,DV=null;
+let _activeSt=null,_activeSav=null,_activeRen=null; // current render context
+
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
+
+function todayKey(){return new Date().toISOString().slice(0,10);}
+function sKey(k){return 'ts_'+k;}
+function loadDay(k){
+  try{
+    var raw=_lsGet(sKey(k));
+    var d=raw?JSON.parse(raw):null;
+    if(d)return{...d,entries:(d.entries||[]).map(e=>({section:'morning',materials:[],uid:uid(),...e,uid:e.uid||uid(),time:e.time?new Date(e.time):new Date()}))};
+  }catch(e){}
+  return{clocked:false,entries:[],purchases:[],supplies:[],clients:[],notes:'',trips:[]};
+}
+function saveDay(k,st){
+  _lsSet(sKey(k),JSON.stringify({...st,entries:st.entries.map(e=>({...e,time:e.time instanceof Date?e.time.toISOString():e.time}))}));
+}
+
+// Safe storage wrapper -- falls back to in-memory if localStorage blocked (Edge on iOS)
+var _memStore={};
+function _lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){_memStore[k]=v;}}
+function _lsGet(k){try{var r=localStorage.getItem(k);if(r!==null)return r;}catch(e){}return _memStore[k]||null;}
+function _lsDel(k){try{localStorage.removeItem(k);}catch(e){delete _memStore[k];}}
+function _lsLen(){try{return localStorage.length;}catch(e){return Object.keys(_memStore).length;}}
+function _lsKey(i){try{return localStorage.key(i);}catch(e){return Object.keys(_memStore)[i]||null;}}
+
+function save(){saveDay(todayKey(),S);}
+function loadPrefs(){empName=_lsGet('ts_name')||'';empColor=_lsGet('ts_color')||'';}
+function savePrefs(){_lsSet('ts_name',empName);_lsSet('ts_color',empColor);}
+
+// == LOCATION TRACKING ==
+// Silently captures GPS coords + reverse-geocodes via Nominatim (free, no key needed).
+// Attaches {lat, lng, address} to the entry after it's already saved -- non-blocking.
+// entUid: the uid of the entry to patch. saveFn: function to call after patching.
+var _locPermDenied=false; // remember if user denied, don't keep asking
+
+// JSONP callback registry -- geocoding uses script-tag injection to bypass CORS
+// from edge://external-file context which blocks XHR to external origins.
+var _geoCallbacks={};
+var _geoCallIdx=0;
+
+function geoTagEntry(entUid, entries, saveFn) {
+  if(_locPermDenied) return;
+  if(!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      var lat=pos.coords.latitude, lng=pos.coords.longitude;
+      reverseGeocode(lat, lng, function(addr) {
+        var e=entries.find(function(x){return x.uid===entUid;});
+        if(e){e.location={lat:lat,lng:lng,address:addr};saveFn();}
+        if(typeof _activeRen==='function') _activeRen();
+      });
+    },
+    function(err){
+      if(err.code===1) _locPermDenied=true; // PERMISSION_DENIED -- stop asking
+    },
+    {enableHighAccuracy:true,timeout:10000,maximumAge:30000}
+  );
+}
+
+// Reverse geocode using JSONP script-tag injection (no CORS restrictions).
+// Tries Nominatim first, falls back to raw coords if unavailable.
+function reverseGeocode(lat, lng, cb) {
+  var cbName='_geoJSONP'+(_geoCallIdx++);
+  var done=false;
+  var script=document.createElement('script');
+
+  // Timeout: if no response in 8s, fall back to coords
+  var timer=setTimeout(function(){
+    if(done)return;done=true;
+    delete window[cbName];
+    if(script.parentNode)script.parentNode.removeChild(script);
+    cb(lat.toFixed(5)+', '+lng.toFixed(5));
+  },8000);
+
+  window[cbName]=function(data){
+    if(done)return;done=true;
+    clearTimeout(timer);
+    delete window[cbName];
+    if(script.parentNode)script.parentNode.removeChild(script);
+    var addr=formatNominatimAddress(data);
+    cb(addr||lat.toFixed(5)+', '+lng.toFixed(5));
+  };
+
+  // Nominatim supports json_callback for JSONP
+  script.src='https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat
+    +'&lon='+lng+'&zoom=18&addressdetails=1&json_callback='+cbName;
+  script.onerror=function(){
+    if(done)return;done=true;
+    clearTimeout(timer);
+    delete window[cbName];
+    cb(lat.toFixed(5)+', '+lng.toFixed(5));
+  };
+  document.head.appendChild(script);
+}
+
+function formatNominatimAddress(data) {
+  if(!data||!data.address) return 'Unknown location';
+  var a=data.address;
+  // Build a short human-readable address: "123 Main St, Calgary" style
+  var parts=[];
+  var street=(a.house_number?(a.house_number+' '):'')+
+             (a.road||a.pedestrian||a.footway||a.path||'');
+  if(street.trim()) parts.push(street.trim());
+  var place=a.suburb||a.neighbourhood||a.village||a.town||a.city||a.municipality||'';
+  if(place) parts.push(place);
+  if(!parts.length && data.display_name) {
+    // Fallback: first two comma-parts of display_name
+    var dn=data.display_name.split(',');
+    parts=[dn[0].trim(), (dn[1]||'').trim()].filter(Boolean);
+  }
+  return parts.join(', ');
+}
+
+function fmtDate(k){return new Date(k+'T12:00').toLocaleDateString('en-CA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});}
+function fmtDateSh(k){return new Date(k+'T12:00').toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric'});}
+function fmtT(d){if(!(d instanceof Date))d=new Date(d);let h=d.getHours(),m=d.getMinutes();const a=h>=12?'PM':'AM';h=h%12||12;return h+':'+String(m).padStart(2,'0')+' '+a;}
+function fmtLive(d){let h=d.getHours(),m=d.getMinutes(),s=d.getSeconds();const a=h>=12?'PM':'AM';h=h%12||12;return h+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')+' '+a;}
+function fmtDur(ms){const t=Math.floor(ms/60000);return Math.floor(t/60)+'h '+(t%60)+'m';}
+function toTV(d){if(!(d instanceof Date))d=new Date(d);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
+function isMorn(d){return(d instanceof Date?d:new Date(d)).getHours()<12;}
+function rowT(r){return(parseFloat(r.qty)||0)*(parseFloat(r.cost)||0);}
+function calcWorked(entries){let t=0,li=null;for(const e of entries){if(e.type==='clock-in')li=new Date(e.time);else if(e.type==='clock-out'&&li){t+=new Date(e.time)-li;li=null;}}if(li)t+=new Date()-li;return t;}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// Reassign sections by walking flat array.
+// Timed entries get section from their actual time.
+// needsTime entries KEEP their current section -- they are only moved by user arrows.
+// This ensures needsTime entries can freely live in any section.
+function reassignSections(entries){
+  let cur='morning';
+  for(let i=0;i<entries.length;i++){
+    const e=entries[i];
+    if(!e.needsTime){
+      if(e.type==='clock-in'||e.type==='clock-out'||e.type==='task'||e.type==='break'){
+        cur=isMorn(new Date(e.time))?'morning':'afternoon';
+      }
+      entries[i].section=cur;
+    }
+    // needsTime: preserve their existing section, only update cur context if adjacent timed entries exist
+    // Do NOT overwrite section for needsTime entries here
+  }
+}
+
+function buildSw(id,sel,cb){
+  const c=document.getElementById(id);if(!c)return;c.innerHTML='';
+  SWS.forEach(p=>{const sw=document.createElement('div');sw.className='sw'+(sel===p.h?' on':'');sw.style.background=p.h||'#1a1916';sw.title=p.l;sw.onclick=()=>{cb(p.h);buildSw(id,p.h,cb);};c.appendChild(sw);});
+  const cw=document.createElement('div');cw.className='sw cust';const pk=document.createElement('input');pk.type='color';pk.value=sel&&!SWS.some(p=>p.h===sel)?sel:'#3a9fd6';pk.oninput=ev=>{cb(ev.target.value);buildSw(id,ev.target.value,cb);};cw.appendChild(pk);c.appendChild(cw);
+}
+
+function showPage(id){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById(id).classList.add('active');window.scrollTo(0,0);}
+function goApp(){editUid=null;showPage('pgApp');renderAll();}
+function goHist(){editUid=null;buildDGrid();showPage('pgHist');}
+
+function wPrev(){const n=document.getElementById('wName').value.trim()||'Your name';const p=document.getElementById('wCprev');p.textContent=n+"'s log";p.style.color=wColor||'var(--tx)';}
+function startApp(){const v=document.getElementById('wName').value.trim();if(!v)return;empName=v;empColor=wColor;savePrefs();S=loadDay(todayKey());showPage('pgApp');renderAll();}
+function openNM(){nmColor=empColor;document.getElementById('nmN').value=empName;buildSw('nmSw',nmColor,c=>{nmColor=c;nmPrev();});nmPrev();document.getElementById('nmovl').classList.add('open');}
+function nmPrev(){const n=document.getElementById('nmN').value.trim()||empName;const p=document.getElementById('nmPrv');p.textContent=n+"'s log";p.style.color=nmColor||'var(--tx)';}
+function closeNM(){document.getElementById('nmovl').classList.remove('open');}
+function saveNM(){const v=document.getElementById('nmN').value.trim();if(!v)return;empName=v;empColor=nmColor;savePrefs();closeNM();renderAll();}
+
+function clockIn(){
+  const n=S.entries.filter(e=>e.type==='clock-in').length+1;S.clocked=true;
+  const t=new Date();
+  const e={uid:uid(),type:'clock-in',tag:'',note:n>1?'Clocked in (session '+n+')':'Clocked in',time:t,manual:false,needsTime:false,section:isMorn(t)?'morning':'afternoon',materials:[]};
+  S.entries.push(e);
+  save();renderAll();
+  geoTagEntry(e.uid,S.entries,save);
+}
+function clockOut(){
+  S.clocked=false;const t=new Date();
+  const e={uid:uid(),type:'clock-out',tag:'',note:'Clocked out',time:t,manual:false,needsTime:false,section:isMorn(t)?'morning':'afternoon',materials:[]};
+  S.entries.push(e);
+  autoFillClientHours(S.entries,S);
+  save();renderAll();
+  geoTagEntry(e.uid,S.entries,save);
+}
+
+function openF(id){
+  document.getElementById(id).classList.add('open');
+  [id+'C',id+'N',id+'PI',id+'PQ',id+'PA',id+'SI',id+'SQ',id+'SA',id+'CLn',id+'CLp',id+'CLh'].forEach(x=>{const el=document.getElementById(x);if(el)el.value='';}); 
+  if(id==='mf'){const el=document.getElementById('mfT');if(el)el.value='';}
+  [id+'PS',id+'SS',id+'CL'].forEach(x=>{const el=document.getElementById(x);if(el)el.classList.remove('open');});
+}
+function closeF(id){document.getElementById(id).classList.remove('open');}
+function togSub(id){const el=document.getElementById(id);if(el)el.classList.toggle('open');}
+
+function colMat(pfx,st){
+  const mats=[];
+  const pi=((document.getElementById(pfx+'PI')||{}).value||'').trim();
+  if(pi){const r={item:pi,qty:(document.getElementById(pfx+'PQ')||{}).value||'1',cost:(document.getElementById(pfx+'PA')||{}).value||'0'};st.purchases.push(r);mats.push({kind:'purchase',...r});}
+  const si=((document.getElementById(pfx+'SI')||{}).value||'').trim();
+  if(si){const r={item:si,qty:(document.getElementById(pfx+'SQ')||{}).value||'1',cost:(document.getElementById(pfx+'SA')||{}).value||'0'};st.supplies.push(r);mats.push({kind:'supply',...r});}
+  return mats;
+}
+
+function submitE(pfx){
+  const tag=((document.getElementById(pfx+'C')||{}).value||'').trim();
+  const note=((document.getElementById(pfx+'N')||{}).value||'').trim();
+  if(!tag&&!note)return;
+  const isBreak=BRK.some(w=>(tag+' '+note).toLowerCase().includes(w));
+  let t=new Date(),needsTime=false,section='morning';
+  if(pfx==='mf'){
+    const tv=document.getElementById('mfT').value;
+    if(tv){const[hh,mm]=tv.split(':').map(Number);t=new Date();t.setHours(hh,mm,0,0);section=isMorn(t)?'morning':'afternoon';}
+    else needsTime=true;
+  } else {
+    section=isMorn(t)?'morning':'afternoon';
+  }
+  const st=_activeSt||S;
+  const materials=colMat(pfx,st);
+  const clOpen=document.getElementById(pfx+'CL')&&document.getElementById(pfx+'CL').classList.contains('open');
+  const entClient=clOpen?colClient(pfx,st):null;
+  const newEnt={uid:uid(),type:isBreak?'break':'task',tag,note,time:t,manual:true,needsTime,section,materials,client:entClient};
+  st.entries.push(newEnt);
+  if(!needsTime)reSortLast(st.entries);
+  if(!needsTime)autoFillClientHours(st.entries,st);
+  closeF(pfx==='lf'?'lf':'mf');
+  if(_activeSt&&_activeSt!==S){saveDay(dvK,DV);renderDV();}else{save();renderAll();}
+  // location tag -- only for real-time entries (not manual no-time entries)
+  if(!needsTime){
+    const saveFn=(_activeSt&&_activeSt!==S)?function(){saveDay(dvK,DV);}:save;
+    geoTagEntry(newEnt.uid,st.entries,saveFn);
+  }
+}
+
+
+// Auto-fill billable hours for ALL client-assigned entries with hoursManual=false.
+// For each such entry, the billable hours = time until the NEXT timed entry
+// (task, break, clock-in, or clock-out), rounded to nearest 0.25h.
+// Recalculates all auto entries so ordering and retroactive fills work correctly.
+function autoFillClientHours(entries, st) {
+  var n = entries.length;
+  if (n < 1) return;
+  
+  // Build list of timed entries in order (skip needsTime)
+  var timed = [];
+  for (var i = 0; i < n; i++) {
+    if (!entries[i].needsTime && entries[i].time) {
+      timed.push({idx: i, time: new Date(entries[i].time), entry: entries[i]});
+    }
+  }
+  if (timed.length < 2) return;
+  
+  // For each timed entry that has a client with hoursManual=false,
+  // calculate hours until the next timed entry
+  var clientsChanged = {}; // track net change per client name
+  
+  for (var ti = 0; ti < timed.length - 1; ti++) {
+    var e = timed[ti].entry;
+    if (!e.client || !e.client.name) continue;
+    if (e.client.hoursManual) continue; // skip manually set hours
+    
+    var nextTime = timed[ti + 1].time;
+    var thisTime = timed[ti].time;
+    var diffMs = nextTime - thisTime;
+    if (diffMs <= 0) continue;
+    
+    var diffHrs = diffMs / 3600000;
+    var rounded = Math.round(diffHrs * 4) / 4; // nearest 0.25h
+    if (rounded <= 0) rounded = 0.25;
+    
+    var oldHrs = parseFloat(e.client.hours) || 0;
+    if (Math.abs(rounded - oldHrs) > 0.001) { // only update if changed
+      if (!clientsChanged[e.client.name]) clientsChanged[e.client.name] = 0;
+      clientsChanged[e.client.name] += (rounded - oldHrs);
+      e.client.hours = rounded;
+    }
+  }
+  
+  // Update the clients[] table with net changes
+  for (var cname in clientsChanged) {
+    for (var k = 0; k < st.clients.length; k++) {
+      if (st.clients[k].client === cname) {
+        var newTotal = Math.max(0, (parseFloat(st.clients[k].hours) || 0) + clientsChanged[cname]);
+        st.clients[k].hours = String(Math.round(newTotal * 4) / 4);
+        break;
+      }
+    }
+  }
+}
+
+function reSortLast(entries){
+  let last=null;
+  for(let i=entries.length-1;i>=0;i--){if(!entries[i].needsTime){last=entries.splice(i,1)[0];break;}}
+  if(!last)return;
+  let ins=entries.length;
+  for(let k=0;k<entries.length;k++){if(!entries[k].needsTime&&new Date(entries[k].time)>last.time){ins=k;break;}}
+  entries.splice(ins,0,last);
+}
+
+// == MOVE -- uses uid to find index, moves exactly one step ==
+// Fix #5: arrows are enabled for all positions -- direction is checked against FULL array length
+// Fix #6: use uid lookup so index is always fresh, no stale closure index
+function moveByUid(entUid,dir,st,savFn,renFn){
+  const entries=st.entries;
+  const i=entries.findIndex(e=>e.uid===entUid);
+  if(i<0)return;
+  const j=i+dir;
+  if(j<0||j>=entries.length)return;
+  // simple swap -- exactly one position
+  const tmp=entries[i];entries[i]=entries[j];entries[j]=tmp;
+  const moved=entries[j];
+  // mark moved as needsTime if it's a task/break (position changed)
+  if(moved.type==='task'||moved.type==='break') moved.needsTime=true;
+  // For needsTime entries: determine section based on neighbors + direction
+  if(moved.needsTime){
+    moved.section=inferSectionForMove(entries,j,dir);
+  }
+  // reassign timed entries sections (does not touch needsTime entries)
+  reassignSections(entries);
+  savFn();renFn();
+}
+
+// Infer section for a needsTime entry after moving to position idx.
+// dir: -1 = moved up, +1 = moved down.
+// Logic:
+//  - Look at what entry is now at position idx+1 (the one we swapped with going up)
+//    and idx-1 (the one above).
+//  - If the entry below us (displaced entry, now at idx+dir opposite) is afternoon -> we're afternoon.
+//  - If the entry below us is morning and entry above is morning -> morning.
+//  - If moving down past the last morning entry with nothing below -> flip to afternoon.
+function inferSectionForMove(entries,idx,dir){
+  const n=entries.length;
+  // Check entry immediately below (idx+1)
+  if(idx+1<n){
+    const below=entries[idx+1];
+    if(!below.needsTime&&(below.type==='clock-in'||below.type==='clock-out'||below.type==='task'||below.type==='break')){
+      const sec=isMorn(new Date(below.time))?'morning':'afternoon';
+      return sec;
+    }
+    if(below.section==='afternoon') return 'afternoon';
+  }
+  // Check entry immediately above (idx-1)
+  if(idx-1>=0){
+    const above=entries[idx-1];
+    if(!above.needsTime&&(above.type==='clock-in'||above.type==='clock-out'||above.type==='task'||above.type==='break')){
+      return isMorn(new Date(above.time))?'morning':'afternoon';
+    }
+    if(above.section==='afternoon') return 'afternoon';
+  }
+  // If moving down and we are now the last entry or all remaining below are needsTime
+  // and all above are morning -- check if we are past the last timed morning entry
+  if(dir===1){
+    // Are we now after all timed morning entries?
+    let lastTimedMornIdx=-1;
+    for(let k=0;k<n;k++){
+      if(!entries[k].needsTime&&isMorn(new Date(entries[k].time))&&
+        (entries[k].type==='clock-in'||entries[k].type==='clock-out'||entries[k].type==='task'||entries[k].type==='break')){
+        lastTimedMornIdx=k;
+      }
+    }
+    if(lastTimedMornIdx>=0&&idx>lastTimedMornIdx){
+      // Check if any timed afternoon entries exist
+      const hasTimedAftn=entries.some(e=>!e.needsTime&&!isMorn(new Date(e.time))&&
+        (e.type==='clock-in'||e.type==='clock-out'||e.type==='task'||e.type==='break'));
+      if(!hasTimedAftn){
+        // No timed afternoon entries -- moving past last morning entry flips to afternoon
+        return 'afternoon';
+      }
+    }
+  }
+  // Keep current section
+  return entries[idx].section||'morning';
+}
+
+// == Edit -- uses uid for stable reference ==
+function startEditByUid(entUid){editUid=entUid;_activeRen();}
+function cancelEdit(){editUid=null;_activeRen();}
+
+function saveEditByUid(entUid,st,savFn,renFn){
+  const i=st.entries.findIndex(e=>e.uid===entUid);
+  if(i<0)return;
+  const tag=((document.getElementById('ee_c_'+entUid)||{}).value||'').trim();
+  const note=((document.getElementById('ee_n_'+entUid)||{}).value||'').trim();
+  if(!tag&&!note)return;
+  const isBreak=BRK.some(w=>(tag+' '+note).toLowerCase().includes(w));
+  st.entries[i].tag=tag;st.entries[i].note=note;st.entries[i].type=isBreak?'break':'task';
+  const pi=((document.getElementById('ee_pi_'+entUid)||{}).value||'').trim();
+  if(pi){const r={item:pi,qty:(document.getElementById('ee_pq_'+entUid)||{}).value||'1',cost:(document.getElementById('ee_pa_'+entUid)||{}).value||'0'};st.purchases.push(r);st.entries[i].materials=(st.entries[i].materials||[]).concat([{kind:'purchase',...r}]);}
+  const si=((document.getElementById('ee_si_'+entUid)||{}).value||'').trim();
+  if(si){const r={item:si,qty:(document.getElementById('ee_sq_'+entUid)||{}).value||'1',cost:(document.getElementById('ee_sa_'+entUid)||{}).value||'0'};st.supplies.push(r);st.entries[i].materials=(st.entries[i].materials||[]).concat([{kind:'supply',...r}]);}
+  // Read section selector (for needsTime entries)
+  const secEl=document.getElementById('ee_sec_'+entUid);
+  if(secEl) st.entries[i].section=secEl.value;
+  const tv=((document.getElementById('ee_t_'+entUid)||{}).value||'').trim();
+  if(tv){
+    const[hh,mm]=tv.split(':').map(Number);const t2=new Date(st.entries[i].time);t2.setHours(hh,mm,0,0);
+    st.entries[i].time=t2;st.entries[i].needsTime=false;st.entries[i].section=isMorn(t2)?'morning':'afternoon';
+    const moved=st.entries.splice(i,1)[0];
+    let ins=st.entries.length;
+    for(let k=0;k<st.entries.length;k++){if(!st.entries[k].needsTime&&new Date(st.entries[k].time)>moved.time){ins=k;break;}}
+    st.entries.splice(ins,0,moved);
+    reassignSections(st.entries);
+  }
+  // Handle client change in edit form
+  // NOTE: capture oldCli NOW using uid lookup, not index i, because splice above may have shifted i
+  const newCliName=((document.getElementById('ee_cln_'+entUid)||{}).value||'').trim();
+  const entAfterMove=st.entries.find(e=>e.uid===entUid);
+  const oldCli=entAfterMove?entAfterMove.client:null;
+  // Reverse old client hours
+  if(oldCli&&oldCli.name){
+    const cIdx=st.clients.findIndex(r=>r.client===oldCli.name);
+    if(cIdx!==-1){
+      const removedHrs=parseFloat(oldCli.hours)||0;
+      const cur=parseFloat(st.clients[cIdx].hours)||0;
+      const newHrs=Math.max(0,cur-removedHrs);
+      const othersExist=st.entries.filter((x,xi)=>xi!==i&&x.client&&x.client.name===oldCli.name).length>0;
+      if(newHrs===0&&!othersExist)st.clients.splice(cIdx,1);
+      else st.clients[cIdx].hours=String(newHrs);
+    }
+  }
+  // Apply new client
+  let newCli=null;
+  if(newCliName){
+    const newProj=((document.getElementById('ee_clp_'+entUid)||{}).value||'').trim();
+    const hrsRaw=((document.getElementById('ee_clh_'+entUid)||{}).value||'').trim();
+    const newHrs=parseFloat(hrsRaw)||0;
+    const hoursManual=hrsRaw!=='';
+    newCli={name:newCliName,project:newProj,hours:newHrs,hoursManual:hoursManual};
+    const existing=st.clients.find(r=>r.client===newCliName);
+    if(existing){existing.hours=String(parseFloat(existing.hours||0)+newHrs);if(newProj&&!existing.project)existing.project=newProj;}
+    else{st.clients.push({client:newCliName,project:newProj,hours:String(newHrs)});}
+  }
+  const finalEnt=st.entries.find(e=>e.uid===entUid);
+  if(finalEnt)finalEnt.client=newCli;
+  editUid=null;savFn();renFn();
+}
+
+function delByUid(entUid,st,savFn,renFn){
+  const i=st.entries.findIndex(e=>e.uid===entUid);if(i<0)return;
+  const e=st.entries[i];
+  // remove linked materials
+  (e.materials||[]).forEach(m=>{
+    const arr=m.kind==='purchase'?st.purchases:st.supplies;
+    const idx=arr.findIndex(r=>r.item===m.item&&String(r.qty)===String(m.qty)&&String(r.cost)===String(m.cost));
+    if(idx!==-1)arr.splice(idx,1);
+  });
+  // remove linked client hours
+  if(e.client&&e.client.name){
+    const cIdx=st.clients.findIndex(r=>r.client===e.client.name);
+    if(cIdx!==-1){
+      const removedHrs=parseFloat(e.client.hours)||0;
+      const cur=parseFloat(st.clients[cIdx].hours)||0;
+      const newHrs=Math.max(0,cur-removedHrs);
+      if(newHrs===0){
+        // check if any other entry still references this client
+        const othersExist=st.entries.filter(x=>x.uid!==entUid&&x.client&&x.client.name===e.client.name).length>0;
+        if(!othersExist) st.clients.splice(cIdx,1);
+        else st.clients[cIdx].hours='0';
+      } else {
+        st.clients[cIdx].hours=String(newHrs);
+      }
+    }
+  }
+  st.entries.splice(i,1);
+  if(editUid===entUid)editUid=null;
+  const last=[...st.entries].reverse().find(e=>e.type==='clock-in'||e.type==='clock-out');
+  st.clocked=last?last.type==='clock-in':false;
+  if(st===S)S.clocked=st.clocked;
+  savFn();renFn();
+}
+
+function buildEnt(e,total,st,savFn,renFn,editable){
+  const isNT=!!e.needsTime,isM=!!e.manual,isEd=editable&&editUid===e.uid;
+  const canEd=editable&&(e.type==='task'||e.type==='break');
+  const dot=EDOT[e.type]||EDOT.task;
+  const timeStr=isNT?'--:-- --':fmtT(new Date(e.time));
+  const mats=e.materials||[];
+  const i=st.entries.findIndex(x=>x.uid===e.uid);
+  // Fix #5: only disable up if at absolute top (i===0), only disable down if at absolute bottom
+  const atTop=i===0, atBot=i===total-1;
+  const div=document.createElement('div');
+  div.className='entry'+(isEd?' editing':isNT?' needsTime':isM?' manentry':'');
+  const arrs=editable
+    ?`<div class="earr"><button class="arrbtn" ${atTop?'disabled':''} onclick="moveByUid('${e.uid}',-1,_activeSt,_activeSav,_activeRen)">^</button><button class="arrbtn" ${atBot?'disabled':''} onclick="moveByUid('${e.uid}',1,_activeSt,_activeSav,_activeRen)">v</button></div>`
+    :'<div style="width:20px;flex-shrink:0;"></div>';
+  let badges=`<span class="badge b-${e.type.replace('-','')}">${ELAB[e.type]||'Activity'}</span>`;
+  if(isNT)badges+=` <span class="badge b-time">! fix time</span>`;
+  else if(isM)badges+=` <span class="badge b-manual">+ manual</span>`;
+  const lbl=(e.type==='clock-in'||e.type==='clock-out')
+    ?`<span class="etag">${esc(e.note||'')}</span>`
+    :(e.tag&&e.note?`<span class="etag">${esc(e.tag)}</span><span class="enote">  -  ${esc(e.note)}</span>`:`<span class="etag">${esc(e.tag||e.note||'')}</span>`);
+  const matH=mats.map(m=>{const t2=rowT(m);return`<span class="mnt ${m.kind==='purchase'?'pur':'sup'}">${esc(m.item)}${m.qty?' x'+m.qty:''}${t2>0?' $'+t2.toFixed(2):''}</span>`;}).join('');
+  const cliHrs=e.client&&e.client.hours?parseFloat(e.client.hours):0;
+  const cliAutoTxt=e.client&&!e.client.hoursManual&&cliHrs>0?' (auto)':'';
+  const cliH=(e.client&&e.client.name)?`<span class="mnt" style="border-color:var(--pu);background:var(--pu-bg);color:var(--pu);">${esc(e.client.name)}${cliHrs>0?' '+cliHrs+'h':' 0h'}${cliAutoTxt}</span>`:'';
+  const locH=e.location&&e.location.address
+    ?`<span class="mnt loc-badge" title="${esc(e.location.address)}" style="border-color:#0d6e6e;background:#e0f4f4;color:#0d6e6e;cursor:pointer;" onclick="showLocDetail('${e.uid}','${esc(e.location.address)}',${e.location.lat||0},${e.location.lng||0})">\uD83D\uDCCD ${esc(e.location.address)}</span>`
+    :'';
+  if(isEd){
+    const opts=CATS.map(p=>`<option${p===e.tag?' selected':''}>${esc(p)}</option>`).join('');
+    const secSel=isNT?`<div class="egrp" style="max-width:160px;"><label>Section</label><select id="ee_sec_${e.uid}"><option value="morning"${e.section==='morning'?' selected':''}>\uD83C\uDF05 Morning</option><option value="afternoon"${e.section==='afternoon'?' selected':''}>\u2600 Afternoon</option></select></div>`:'';
+    div.innerHTML=arrs+`<div class="edot" style="background:${dot}"></div><span class="etime${isNT?' needsT':''}">${timeStr}</span>
+    <div class="ebody"><div class="editform">
+      <div class="editrow">
+        ${secSel}
+        <div class="egrp"><label>Time${isNT?' (optional)':''}</label><input type="time" id="ee_t_${e.uid}" value="${isNT?'':toTV(new Date(e.time))}"></div>
+        <div class="egrp"><label>Category</label><select id="ee_c_${e.uid}"><option value=""> -  pick  - </option>${opts}</select></div>
+        <div class="egrp"><label>Note</label><input type="text" id="ee_n_${e.uid}" value="${esc(e.note||'')}" placeholder="drove to shop..."></div>
+      </div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;">
+        <button class="btn tl xs" onclick="togSub('ee_ps_${e.uid}')">Add Purchase</button>
+        <button class="btn bl xs" onclick="togSub('ee_ss_${e.uid}')">Add Supply</button>
+        <button class="btn mn xs" onclick="togSub('ee_cl_${e.uid}');buildClientBtns('ee_cl_${e.uid}')">
+          ${e.client&&e.client.name?'Change client':'+ Client'}
+        </button>
+      </div>
+      <div class="subf" id="ee_cl_${e.uid}">
+        <div class="subtit" style="color:var(--pu);">
+          ${e.client&&e.client.name?'Current: <strong>'+esc(e.client.name)+'</strong> ('+((e.client.hours||0))+'h) - select to change or clear':'Assign to client'}
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;" id="ee_cl_${e.uid}_btns"></div>
+        <div class="editrow">
+          <div class="egrp"><label>Client name</label><input type="text" id="ee_cln_${e.uid}" value="${esc((e.client&&e.client.name)||'')}" placeholder="name or leave blank to remove"></div>
+          <div class="egrp" style="max-width:100px;"><label>Project</label><input type="text" id="ee_clp_${e.uid}" value="${esc((e.client&&e.client.project)||'')}"></div>
+          <div class="egrp" style="max-width:72px;"><label>Hours</label><input type="number" id="ee_clh_${e.uid}" value="${(e.client&&e.client.hours)||''}" min="0" step="0.5" placeholder="0"></div>
+        </div>
+      </div>
+      <div class="subf" id="ee_ps_${e.uid}"><div class="subtit" style="color:var(--tl);">Purchase</div>
+        <div class="editrow"><div class="egrp"><label>Item</label><input type="text" id="ee_pi_${e.uid}" placeholder="Description"></div><div class="egrp" style="max-width:72px;"><label>Qty</label><input type="number" id="ee_pq_${e.uid}" min="0" step="1" placeholder="1"></div><div class="egrp" style="max-width:82px;"><label>Unit $</label><input type="number" id="ee_pa_${e.uid}" min="0" step="0.01" placeholder="0.00"></div></div>
+      </div>
+      <div class="subf" id="ee_ss_${e.uid}"><div class="subtit" style="color:var(--bl);">Supply</div>
+        <div class="editrow"><div class="egrp"><label>Item</label><input type="text" id="ee_si_${e.uid}" placeholder="Description"></div><div class="egrp" style="max-width:72px;"><label>Qty</label><input type="number" id="ee_sq_${e.uid}" min="0" step="1" placeholder="1"></div><div class="egrp" style="max-width:82px;"><label>Unit $</label><input type="number" id="ee_sa_${e.uid}" min="0" step="0.01" placeholder="0.00"></div></div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        <button class="btn pr xs" onclick="saveEditByUid('${e.uid}',_activeSt,_activeSav,_activeRen)">Save</button>
+        <button class="btn xs" onclick="cancelEdit()">Cancel</button>
+      </div>
+    </div></div>`;
+  } else {
+    const secBtn=isNT&&editable?`<button class="ibtn" style="font-size:11px;color:var(--am);" onclick="toggleEntrySection('${e.uid}')" title="Move to ${e.section==='morning'?'Afternoon':'Morning'}">${e.section==='morning'?'\uD83C\uDF05->Aftn':'\u2600->Morn'}</button>`:'';
+    div.innerHTML=arrs+`<div class="edot" style="background:${dot}"></div><span class="etime${isNT?' needsT':''}">${timeStr}</span>
+    <div class="ebody"><div class="emain"><span class="elbl">${lbl}</span><div class="badges">${badges}</div>
+      <div class="eacts">${secBtn}${canEd?`<button class="ibtn" onclick="startEditByUid('${e.uid}')">Edit</button>`:''}${editable?`<button class="ibtn del" onclick="delByUid('${e.uid}',_activeSt,_activeSav,_activeRen)">x</button>`:''}</div>
+    </div>${(matH||cliH||locH)?`<div class="matnotes">${matH}${cliH}${locH}</div>`:''}</div>`;
+  }
+  return div;
+}
+
+function renderTL(st,savFn,renFn,editable,wrapId){
+  _activeSt=st;_activeSav=savFn;_activeRen=renFn;
+  const wrap=document.getElementById(wrapId||'tlWrap');if(!wrap)return;wrap.innerHTML='';
+  reassignSections(st.entries);
+  const total=st.entries.length;
+  const mornIdx=[],aftnIdx=[];
+  st.entries.forEach((e,i)=>{(e.section==='morning'?mornIdx:aftnIdx).push(i);});
+  function makeSec(label,indices,empty){
+    const sec=document.createElement('div');sec.className='daysec';
+    sec.innerHTML=`<div class="sechdr"><span class="sectit">${label}</span><div class="secln"></div></div>`;
+    const tl=document.createElement('div');tl.className='tl';
+    if(!indices.length){tl.innerHTML=`<div class="noent">${empty}</div>`;}
+    else indices.forEach((idx,si)=>{
+      const e=st.entries[idx];
+      if(e.type==='clock-in'&&si>0){const d=document.createElement('div');d.className='sessdiv';d.textContent=' -  new session  - ';tl.appendChild(d);}
+      tl.appendChild(buildEnt(e,total,st,savFn,renFn,editable));
+    });
+    sec.appendChild(tl);return sec;
+  }
+  wrap.appendChild(makeSec('\uD83C\uDF05 Morning',mornIdx,'No morning entries yet.'));
+  wrap.appendChild(makeSec('\u2600 Afternoon',aftnIdx,'No afternoon entries yet.'));
+}
+
+function renderStats(){
+  const ins=S.entries.filter(e=>e.type==='clock-in'),outs=S.entries.filter(e=>e.type==='clock-out');
+  document.getElementById('sIn').textContent=ins.length?fmtT(new Date(ins[0].time)):'--:--';
+  document.getElementById('sOut').textContent=outs.length?fmtT(new Date(outs[outs.length-1].time)):'--:--';
+  document.getElementById('sTotal').textContent=fmtDur(calcWorked(S.entries));
+  document.getElementById('sSess').textContent=ins.length;
+  document.getElementById('sdot').className='sdot'+(S.clocked?' on':'');
+  const n=ins.length;
+  document.getElementById('stxt').textContent=S.clocked?(n>1?'Clocked in  -  session '+n:'Clocked in  -  working'):(S.entries.length?'Clocked out':'Not clocked in');
+  document.getElementById('btnIn').disabled=S.clocked;
+  document.getElementById('btnLog').disabled=!S.clocked;
+  document.getElementById('btnOut').disabled=!S.clocked;
+}
+
+function renderList(arr,lid,tid,st,field,editable){
+  const list=document.getElementById(lid);if(!list)return;list.innerHTML='';
+  const isT=st===S;
+  // Remove blank placeholder rows before rendering (keep last row so user can type)
+  if(editable){for(let ri=arr.length-2;ri>=0;ri--){if(!arr[ri].item&&!arr[ri].qty&&!arr[ri].cost){arr.splice(ri,1);}}}
+  arr.forEach((p,i)=>{
+    const row=document.createElement('div');row.className='irow';
+    if(editable){
+      const d=document.createElement('input');d.type='text';d.value=p.item||'';d.placeholder='Description';d.oninput=()=>{st[field][i].item=d.value;isT?save():saveDay(dvK,DV);};
+      const q=document.createElement('input');q.type='number';q.value=p.qty||'';q.placeholder='1';q.min='0';q.step='1';q.oninput=()=>{st[field][i].qty=q.value;upTot(arr,tid);isT?save():saveDay(dvK,DV);};
+      const c=document.createElement('input');c.type='number';c.value=p.cost||'';c.placeholder='0.00';c.min='0';c.step='0.01';c.oninput=()=>{st[field][i].cost=c.value;upTot(arr,tid);isT?save():saveDay(dvK,DV);};
+      const del=document.createElement('button');del.className='rmbtn';del.textContent='x';del.onclick=()=>{st[field].splice(i,1);isT?save():saveDay(dvK,DV);renderList(st[field],lid,tid,st,field,editable);};
+      row.appendChild(d);row.appendChild(q);row.appendChild(c);row.appendChild(del);
+    } else {
+      row.innerHTML=`<span style="font-size:12px;padding:4px 0;">${esc(p.item)}</span><span style="font-size:12px;">${esc(p.qty)}</span><span style="font-size:12px;">$${rowT(p).toFixed(2)}</span><span></span>`;
+    }
+    list.appendChild(row);
+  });
+  upTot(arr,tid);
+}
+function upTot(arr,tid){const el=document.getElementById(tid);if(!el)return;const t=arr.reduce((s,p)=>s+rowT(p),0);el.textContent=arr.length?'Total: $'+t.toFixed(2):'';}
+function renderCli(st,bid,tid,editable){
+  const body=document.getElementById(bid);if(!body)return;body.innerHTML='';
+  const isT=st===S;
+  st.clients.forEach((r,i)=>{
+    const tr=document.createElement('tr');
+    if(editable){
+      ['client','project'].forEach(f=>{const td=document.createElement('td');const inp=document.createElement('input');inp.type='text';inp.value=r[f]||'';inp.placeholder=f.charAt(0).toUpperCase()+f.slice(1);inp.oninput=()=>{st.clients[i][f]=inp.value;isT?save():saveDay(dvK,DV);};td.appendChild(inp);tr.appendChild(td);});
+      const htd=document.createElement('td');const hi=document.createElement('input');hi.type='number';hi.value=r.hours||'';hi.placeholder='0';hi.step='0.5';hi.min='0';hi.oninput=()=>{st.clients[i].hours=hi.value;upCliTot(st,tid);isT?save():saveDay(dvK,DV);};htd.appendChild(hi);tr.appendChild(htd);
+      const dtd=document.createElement('td');const db=document.createElement('button');db.className='rmbtn';db.textContent='x';db.onclick=()=>{st.clients.splice(i,1);isT?save():saveDay(dvK,DV);renderCli(st,bid,tid,editable);};dtd.appendChild(db);tr.appendChild(dtd);
+    } else {
+      tr.innerHTML=`<td style="font-size:12px;padding:3px 4px;">${esc(r.client)}</td><td style="font-size:12px;padding:3px 4px;">${esc(r.project)}</td><td style="font-size:12px;padding:3px 4px;">${r.hours||0} hrs</td><td></td>`;
+    }
+    body.appendChild(tr);
+  });
+  upCliTot(st,tid);
+}
+function upCliTot(st,tid){const el=document.getElementById(tid);if(!el)return;const t=st.clients.reduce((s,r)=>s+(parseFloat(r.hours)||0),0);el.textContent=st.clients.length?'Total billable: '+t.toFixed(1)+' hrs':'';}
+function addPur(){S.purchases.push({item:'',qty:'',cost:''});save();renderList(S.purchases,'purL','purTot',S,'purchases',true);}
+function addSup(){S.supplies.push({item:'',qty:'',cost:''});save();renderList(S.supplies,'supL','supTot',S,'supplies',true);}
+function addCli(){S.clients.push({client:'',project:'',hours:''});save();renderCli(S,'cliB','cliTot',true);}
+
+function renderAll(){
+  _activeSt=S;_activeSav=save;_activeRen=renderAll;
+  const ln=document.getElementById('lgName');
+  ln.textContent=empName?(empName+"'s log"):"Today's log";ln.style.color=empColor||'var(--tx)';
+  document.getElementById('appTitle').textContent=empName?empName+"'s Timesheet":'Timesheet';
+  document.getElementById('lgDate').textContent=fmtDate(todayKey());
+  document.getElementById('dayN').value=S.notes||'';
+  rebuildCatSelects();
+  renderStats();
+  renderTL(S,save,renderAll,true,'tlWrap');
+  renderList(S.purchases,'purL','purTot',S,'purchases',true);
+  renderList(S.supplies,'supL','supTot',S,'supplies',true);
+  renderCli(S,'cliB','cliTot',true);
+}
+
+function buildDGrid(){
+  const grid=document.getElementById('dGrid');grid.innerHTML='';
+  const today=new Date(),twoWk=new Date(today);twoWk.setDate(today.getDate()-14);
+  const thirtyD=new Date(today);thirtyD.setDate(today.getDate()-30);
+  for(let d=new Date(today);d>=thirtyD;d.setDate(d.getDate()-1)){
+    const k=d.toISOString().slice(0,10);if(k===todayKey())continue;
+    const st=loadDay(k);const hasData=st.entries.length>0||st.purchases.length>0;
+    const editable=new Date(k+'T12:00')>=twoWk;
+    const btn=document.createElement('div');btn.className='dbtn'+(editable?' edit':'');
+    btn.innerHTML=`<div class="dlbl${hasData?' ddata':''}">${fmtDateSh(k)}</div><div class="dsub">${editable?'Edit editable':'[*] view only'}${hasData?' . has data':''}</div>`;
+    btn.onclick=()=>openDV(k,editable);grid.appendChild(btn);
+  }
+}
+
+function openDV(k,editable){
+  dvK=k;dvEditable=editable;editUid=null;DV=loadDay(k);
+  document.getElementById('dvTit').textContent=fmtDateSh(k);
+  document.getElementById('dvEBtn').style.display=editable?'inline-flex':'none';
+  renderDV();showPage('pgDV');
+}
+function dvEdit(){dvEditable=true;document.getElementById('dvEBtn').style.display='none';renderDV();}
+
+function renderDV(){
+  const body=document.getElementById('dvB');body.innerHTML='';
+  const st=DV,ed=dvEditable;
+  const savFn=()=>saveDay(dvK,DV);const renFn=renderDV;
+  _activeSt=st;_activeSav=savFn;_activeRen=renFn;
+  const ins=st.entries.filter(e=>e.type==='clock-in'),outs=st.entries.filter(e=>e.type==='clock-out');
+  const sd=document.createElement('div');
+  sd.innerHTML=`<div class="lghdr"><div class="lgname" style="color:${empColor||'var(--tx)'};">${esc(empName?(empName+"'s log"):"Log")}</div><div class="lgdate">${fmtDate(dvK)}</div></div>
+  <div class="strow" style="margin-bottom:11px;">
+    <div class="stcard"><div class="stlbl">Start</div><div class="stval">${ins.length?fmtT(new Date(ins[0].time)):'--:--'}</div></div>
+    <div class="stcard"><div class="stlbl">End</div><div class="stval">${outs.length?fmtT(new Date(outs[outs.length-1].time)):'--:--'}</div></div>
+    <div class="stcard"><div class="stlbl">Total</div><div class="stval">${fmtDur(calcWorked(st.entries))}</div></div>
+    <div class="stcard"><div class="stlbl">Sessions</div><div class="stval">${ins.length}</div></div>
+  </div>`;
+  body.appendChild(sd);
+
+  if(ed){
+    // Action row with "Add manual entry" button that opens an inline form in DV
+    const ab=document.createElement('div');ab.className='actrow no-print';
+    ab.innerHTML=`<button class="btn mn" onclick="dvTogglePastForm()">+ Add manual entry</button>`;
+    body.appendChild(ab);
+    // Inline manual entry form embedded directly in day view
+    const dvForm=document.createElement('div');dvForm.id='dvPastForm';dvForm.className='fcard';
+    dvForm.innerHTML=`
+      <div class="ftitle">Add a manual entry to ${fmtDateSh(dvK)}</div>
+      <div class="pastnote"> Leave time blank -> freely moveable with ^v. Enter time -> auto-sorts.</div>
+      <div class="frow">
+        <div class="fgrp" style="max-width:150px;"><div class="flbl">Time <span style="font-weight:400;opacity:.6;">(optional)</span></div>
+          <input type="time" id="dvMfT"><div class="fnote">Blank = no time set</div></div>
+        <div class="fgrp"><div class="flbl">Category</div>
+          <select id="dvMfC"><option value=""> -  pick  - </option>${buildCatOptions('')}</select></div>
+        <div class="fgrp"><div class="flbl">Note (optional)</div>
+          <input type="text" id="dvMfN" placeholder="drove to the shop, called manager"></div>
+      </div>
+      <div class="matbtns">
+        <button class="btn tl xs" onclick="togSub('dvMfPS')">Add Purchase</button>
+        <button class="btn bl xs" onclick="togSub('dvMfSS')">Add Supply</button>
+        <button class="btn mn xs" onclick="togSub('dvMfCL');buildClientBtns('dvMf')">+ Client</button>
+      </div>
+      <div class="subf" id="dvMfPS"><div class="subtit" style="color:var(--tl);">Purchase</div>
+        <div class="frow">
+          <div class="fgrp"><div class="flbl">Item</div><input type="text" id="dvMfPI" placeholder="Description"></div>
+          <div class="fgrp" style="max-width:72px;"><div class="flbl">Qty</div><input type="number" id="dvMfPQ" min="0" step="1" placeholder="1"></div>
+          <div class="fgrp" style="max-width:82px;"><div class="flbl">Unit $</div><input type="number" id="dvMfPA" min="0" step="0.01" placeholder="0.00"></div>
+        </div></div>
+      <div class="subf" id="dvMfSS"><div class="subtit" style="color:var(--bl);">Supply</div>
+        <div class="frow">
+          <div class="fgrp"><div class="flbl">Item</div><input type="text" id="dvMfSI" placeholder="Description"></div>
+          <div class="fgrp" style="max-width:72px;"><div class="flbl">Qty</div><input type="number" id="dvMfSQ" min="0" step="1" placeholder="1"></div>
+          <div class="fgrp" style="max-width:82px;"><div class="flbl">Unit $</div><input type="number" id="dvMfSA" min="0" step="0.01" placeholder="0.00"></div>
+        </div></div>
+      <div class="subf" id="dvMfCL">
+        <div class="subtit" style="color:var(--pu);">Assign to client</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;" id="dvMfCLbtns"></div>
+        <div class="frow">
+          <div class="fgrp"><div class="flbl">Client name</div><input type="text" id="dvMfCLn" placeholder="or type custom name"></div>
+          <div class="fgrp" style="max-width:100px;"><div class="flbl">Project</div><input type="text" id="dvMfCLp" placeholder="Project"></div>
+          <div class="fgrp" style="max-width:72px;"><div class="flbl">Hours</div><input type="number" id="dvMfCLh" min="0" step="0.5" placeholder="0"></div>
+        </div>
+      </div>
+      <div class="facts">
+        <button class="btn pr sm" onclick="dvSubmitPast()">Add</button>
+        <button class="btn sm" onclick="dvTogglePastForm()">Cancel</button>
+      </div>`;
+    body.appendChild(dvForm);
+  }
+
+  const tw=document.createElement('div');tw.id='dv_tlWrap';body.appendChild(tw);
+  renderTL(st,savFn,renFn,ed,'dv_tlWrap');
+
+  const pg=document.createElement('div');pg.className='bgrid';
+  pg.innerHTML=`
+    <div class="panel">
+      <div class="ptit">Materials &amp; Resources</div>
+      <div class="psub">Buy Purchases  -  bought for job</div>
+      <div class="icols hdr" style="margin-bottom:4px;"><span>Item description</span><span>Qty</span><span>Unit $</span><span></span></div>
+      <div id="dv_pl"></div>${ed?'<button class="addrow" onclick="dvAddP()">+ Add purchase</button>':''}
+      <div class="ptotal" id="dv_pt"></div>
+      <div class="mat-sep"></div>
+      <div class="psub">Pkg Supplies used  -  from inventory/shop</div>
+      <div class="icols hdr" style="margin-bottom:4px;"><span>Item description</span><span>Qty</span><span>Unit $</span><span></span></div>
+      <div id="dv_sl"></div>${ed?'<button class="addrow" onclick="dvAddS()">+ Add supply</button>':''}
+      <div class="ptotal" id="dv_st"></div>
+    </div>
+    <div class="panel">
+      <div class="ptit">Client / Project</div>
+      <table class="ctbl"><thead><tr><th>Client</th><th>Project</th><th>Billable hrs</th><th></th></tr></thead><tbody id="dv_cb"></tbody></table>
+      ${ed?'<button class="addrow" onclick="dvAddC()">+ Add row</button>':''}
+      <div class="ptotal" id="dv_ct"></div>
+    </div>
+    <div class="panel"><div class="ptit">Notes / Summary</div><textarea id="dv_notes" ${ed?'':'disabled'} placeholder="Summary...">${esc(st.notes||'')}</textarea></div>`;
+  body.appendChild(pg);
+  if(ed){document.getElementById('dv_notes').oninput=()=>{DV.notes=document.getElementById('dv_notes').value;savFn();};}
+  renderList(st.purchases,'dv_pl','dv_pt',st,'purchases',ed);
+  renderList(st.supplies,'dv_sl','dv_st',st,'supplies',ed);
+  renderCli(st,'dv_cb','dv_ct',ed);
+}
+function dvAddP(){DV.purchases.push({item:'',qty:'',cost:''});saveDay(dvK,DV);renderList(DV.purchases,'dv_pl','dv_pt',DV,'purchases',true);}
+function dvAddS(){DV.supplies.push({item:'',qty:'',cost:''});saveDay(dvK,DV);renderList(DV.supplies,'dv_sl','dv_st',DV,'supplies',true);}
+function dvAddC(){DV.clients.push({client:'',project:'',hours:''});saveDay(dvK,DV);renderCli(DV,'dv_cb','dv_ct',true);}
+
+// == PRINT ==
+function buildPrintSheet(k){
+  const st=k===todayKey()?S:loadDay(k);
+  reassignSections(st.entries);
+  const ins=st.entries.filter(e=>e.type==='clock-in'),outs=st.entries.filter(e=>e.type==='clock-out');
+  const firstIn=ins.length?fmtT(new Date(ins[0].time)):'';
+  const lastOut=outs.length?fmtT(new Date(outs[outs.length-1].time)):'';
+  const totalTime=fmtDur(calcWorked(st.entries));
+  const dayOfWeek=new Date(k+'T12:00').toLocaleDateString('en-CA',{weekday:'long'});
+  const dateStr=new Date(k+'T12:00').toLocaleDateString('en-CA',{month:'long',day:'numeric',year:'numeric'});
+  // Fix #1: name, day, date all use same color
+  const headerColor=empColor||'#000000';
+
+  let mornRows='',aftnRows='',hasMorn=false,hasAftn=false;
+  st.entries.forEach(e=>{
+    const timeStr=e.needsTime?'--:-- --':fmtT(new Date(e.time));
+    const lbl=(e.type==='clock-in'||e.type==='clock-out')
+      ?`<span class="ps-etag">${esc(e.note||'')}</span>`
+      :(e.tag&&e.note?`<span class="ps-etag">${esc(e.tag)}</span><span class="ps-enote">  -  ${esc(e.note)}</span>`:`<span class="ps-etag">${esc(e.tag||e.note||'')}</span>`);
+    const mats=(e.materials||[]).map(m=>{const t2=rowT(m);return`<span class="ps-emat ${m.kind==='purchase'?'pur':'sup'}">${esc(m.item)}${m.qty?' x'+m.qty:''}${t2>0?' $'+t2.toFixed(2):''}</span>`;}).join(' ');
+    const row=`<div class="ps-erow"><div class="ps-et${e.needsTime?' pend':''}">${timeStr}</div><div class="ps-el">${lbl}${mats?'<div>'+mats+'</div>':''}</div></div>`;
+    if(e.section==='morning'){mornRows+=row;hasMorn=true;}else{aftnRows+=row;hasAftn=true;}
+  });
+
+  let purRows='',supRows='';
+  const purTotal=st.purchases.reduce((s,p)=>s+rowT(p),0);
+  const supTotal=st.supplies.reduce((s,p)=>s+rowT(p),0);
+  st.purchases.forEach(p=>{purRows+=`<div class="ps-mrow"><div class="ps-mc">${esc(p.item)}</div><div class="ps-mc">${esc(p.qty)}</div><div class="ps-mc">$${parseFloat(p.cost||0).toFixed(2)}</div><div class="ps-mc">$${rowT(p).toFixed(2)}</div></div>`;});
+  st.supplies.forEach(p=>{supRows+=`<div class="ps-mrow"><div class="ps-mc">${esc(p.item)}</div><div class="ps-mc">${esc(p.qty)}</div><div class="ps-mc">$${parseFloat(p.cost||0).toFixed(2)}</div><div class="ps-mc">$${rowT(p).toFixed(2)}</div></div>`;});
+
+  // Fix #2: client/project on LEFT side between entries and totals
+  let cliRows='';
+  st.clients.forEach(r=>{cliRows+=`<tr><td>${esc(r.client)}</td><td>${esc(r.project)}</td><td>${r.hours||0}</td></tr>`;});
+
+  document.getElementById('psScale').innerHTML=`
+  <div class="ps-hdr">
+    <div class="ps-hcell"><div class="ps-hlbl">Name</div><div class="ps-hval" style="color:${headerColor};">${esc(empName||'')}</div></div>
+    <div class="ps-hcell"><div class="ps-hlbl">Day</div><div class="ps-hval" style="color:${headerColor};">${esc(dayOfWeek)}</div></div>
+    <div class="ps-hcell"><div class="ps-hlbl">Date</div><div class="ps-hval" style="color:${headerColor};">${esc(dateStr)}</div></div>
+  </div>
+  <div class="ps-body">
+    <div class="ps-left">
+      <div class="ps-entries">
+        ${hasMorn?`<div class="ps-slbl">Morning</div>${mornRows}`:''}
+        ${hasAftn?`<div class="ps-slbl" style="border-top:1px solid #bbb;">Afternoon</div>${aftnRows}`:''}
+        ${!hasMorn&&!hasAftn?'<div style="padding:8px;font-size:8pt;color:#888;">No entries</div>':''}
+      </div>
+      <div class="ps-tots">
+        <div class="ps-tcell"><div class="ps-tlbl">Start</div><div class="ps-tval">${firstIn||'--'}</div></div>
+        <div class="ps-tcell"><div class="ps-tlbl">End</div><div class="ps-tval">${lastOut||'--'}</div></div>
+        <div class="ps-tcell"><div class="ps-tlbl">Total</div><div class="ps-tval">${totalTime}</div></div>
+        <div class="ps-tcell"><div class="ps-tlbl">Billable</div><div class="ps-tval">${st.clients.reduce((s,r)=>s+(parseFloat(r.hours)||0),0).toFixed(1)}h</div></div>
+      </div>
+      ${cliRows?`<div class="ps-cli-left"><table><thead><tr><th>Client</th><th>Project</th><th>Hours</th></tr></thead><tbody>${cliRows}</tbody></table></div>`:''}
+    </div>
+    <div class="ps-right">
+      <div class="ps-rsec">
+        <div class="ps-slbl">Purchases / Supplies Used</div>
+        ${st.purchases.length?`
+          <div class="ps-slbl" style="font-size:6.5pt;background:#f0faf8;">Buy Purchases</div>
+          <div class="ps-mrow hdr"><span>Item</span><span>Qty</span><span>Unit</span><span>Total</span></div>
+          ${purRows}<div class="ps-mtot">Purchases: $${purTotal.toFixed(2)}</div>`
+          :'<div style="padding:4px 6px;font-size:7.5pt;color:#888;">No purchases</div>'}
+        ${st.supplies.length?`
+          <div class="ps-slbl" style="font-size:6.5pt;background:#f0f3fa;border-top:0.5px solid #ccc;">Pkg Supplies used</div>
+          <div class="ps-mrow hdr"><span>Item</span><span>Qty</span><span>Unit</span><span>Total</span></div>
+          ${supRows}<div class="ps-mtot">Supplies: $${supTotal.toFixed(2)}</div>`
+          :'<div style="padding:4px 6px;font-size:7.5pt;color:#888;border-top:0.5px solid #ccc;">No supplies used</div>'}
+      </div>
+      <div class="ps-notes">
+        <div class="ps-slbl">Notes / Summary</div>
+        ${st.notes?`<div class="ps-nbody">${esc(st.notes)}</div>`:`<div class="ps-nlines"></div>`}
+      </div>
+    </div>
+  </div>`;
+
+  // Auto-scale: reset first, then measure, then scale
+  // @page margin 0.25in each side -> 0.5in total
+  // letter = 11in tall, 8.5in wide -> usable = 10.5in x 8in at 96dpi = 1008 x 768px
+  const PS=document.getElementById('printSheet');
+  const scale=document.getElementById('psScale');
+  PS.style.height='auto';
+  scale.style.transform='none';scale.style.transformOrigin='top left';scale.style.width='100%';
+  // Triple rAF to ensure full layout
+  requestAnimationFrame(()=>requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    setTimeout(()=>{
+      const pageH=1008, pageW=PS.offsetWidth||768;
+      const cH=scale.offsetHeight||scale.scrollHeight;
+      const cW=scale.offsetWidth||scale.scrollWidth;
+      if(!cH||!cW)return;
+      const rH=pageH/cH, rW=pageW/cW;
+      const r=Math.min(rH,rW,1);
+      if(r<0.995){
+        scale.style.transform='scale('+r+')';
+        scale.style.width=Math.ceil(100/r)+'%';
+        PS.style.height=Math.ceil(cH*r+2)+'px';
+        PS.style.overflow='hidden';
+      }
+    },120);
+  })));
+}
+
+function doCSV(k){
+  const st=k===todayKey()?S:loadDay(k);
+  reassignSections(st.entries);
+  const rows=[['Date','Time','Section','Type','Category','Note','Manual','Needs Time','Location']];
+  st.entries.forEach(e=>rows.push([k,e.needsTime?'pending':fmtT(new Date(e.time)),e.section,e.type,e.tag||'',e.note||'',e.manual?'Yes':'',e.needsTime?'Yes':'',(e.location&&e.location.address)||'']));
+  rows.push([],[' PURCHASES '],['Item','Qty','Unit $','Line Total']);
+  st.purchases.forEach(p=>rows.push([p.item,p.qty,'$'+p.cost,'$'+rowT(p).toFixed(2)]));
+  rows.push([],[' SUPPLIES '],['Item','Qty','Unit $','Line Total']);
+  st.supplies.forEach(p=>rows.push([p.item,p.qty,'$'+p.cost,'$'+rowT(p).toFixed(2)]));
+  rows.push([],[' CLIENT / PROJECT '],['Client','Project','Billable Hours']);
+  st.clients.forEach(r=>rows.push([r.client,r.project,r.hours]));
+  rows.push([],[' TRIPS / MILEAGE '],['From','To','Distance','Unit','Purpose','Time']);
+  (st.trips||[]).forEach(t=>rows.push([t.from||'',t.to||'',t.dist,t.unit,t.purpose||'',t.time?fmtT(new Date(t.time)):'']));
+  const tripTotalKm=(st.trips||[]).reduce(function(s,t){return s+(t.unit==='mi'?t.dist*1.60934:t.dist);},0);
+  if((st.trips||[]).length)rows.push(['','','Total km: '+tripTotalKm.toFixed(1),'Total mi: '+(tripTotalKm/1.60934).toFixed(1),'','']);
+  rows.push([],[' NOTES '],[st.notes||'']);
+  const csv=rows.map(r=>r.map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(',')).join('\n');
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='timesheet_'+k+'.csv';a.click();
+}
+
+// Toggle section for needsTime entry (Morning <-> Afternoon)
+function toggleEntrySection(entUid){
+  const st=_activeSt;const savFn=_activeSav;const renFn=_activeRen;
+  const e=st.entries.find(x=>x.uid===entUid);
+  if(!e)return;
+  e.section=e.section==='morning'?'afternoon':'morning';
+  savFn();renFn();
+}
+
+function dvTogglePastForm(){
+  const f=document.getElementById('dvPastForm');if(!f)return;
+  f.classList.toggle('open');
+  if(f.classList.contains('open')){
+    ['dvMfT','dvMfC','dvMfN','dvMfPI','dvMfPQ','dvMfPA','dvMfSI','dvMfSQ','dvMfSA'].forEach(x=>{const el=document.getElementById(x);if(el)el.value='';});
+    ['dvMfPS','dvMfSS'].forEach(x=>{const el=document.getElementById(x);if(el)el.classList.remove('open');});
+  }
+}
+
+function dvSubmitPast(){
+  const tag=((document.getElementById('dvMfC')||{}).value||'').trim();
+  const note=((document.getElementById('dvMfN')||{}).value||'').trim();
+  if(!tag&&!note)return;
+  const isBreak=BRK.some(w=>(tag+' '+note).toLowerCase().includes(w));
+  let t=new Date(),needsTime=false,section='morning';
+  const tv=document.getElementById('dvMfT').value;
+  if(tv){const[hh,mm]=tv.split(':').map(Number);t=new Date();t.setHours(hh,mm,0,0);section=isMorn(t)?'morning':'afternoon';}
+  else needsTime=true;
+  // collect materials
+  const mats=[];
+  const pi=((document.getElementById('dvMfPI')||{}).value||'').trim();
+  if(pi){const r={item:pi,qty:(document.getElementById('dvMfPQ')||{}).value||'1',cost:(document.getElementById('dvMfPA')||{}).value||'0'};DV.purchases.push(r);mats.push({kind:'purchase',...r});}
+  const si=((document.getElementById('dvMfSI')||{}).value||'').trim();
+  if(si){const r={item:si,qty:(document.getElementById('dvMfSQ')||{}).value||'1',cost:(document.getElementById('dvMfSA')||{}).value||'0'};DV.supplies.push(r);mats.push({kind:'supply',...r});}
+  const dvCLopen=document.getElementById('dvMfCL')&&document.getElementById('dvMfCL').classList.contains('open');
+  const dvEntClient=dvCLopen?colClient('dvMf',DV):null;
+  const dvEnt={uid:uid(),type:isBreak?'break':'task',tag,note,time:t,manual:true,needsTime,section,materials:mats,client:dvEntClient};
+  DV.entries.push(dvEnt);
+  if(!needsTime)reSortLast(DV.entries);
+  saveDay(dvK,DV);
+  renderDV();
+  if(!needsTime) geoTagEntry(dvEnt.uid,DV.entries,function(){saveDay(dvK,DV);});
+}
+
+function doPrint(k){buildPrintSheet(k);setTimeout(()=>window.print(),250);}
+
+// == View toggle ==
+let currentView='full';
+function setView(v){
+  currentView=v;
+  _lsSet('ts_view',v==='loc'?'full':v); // don't persist loc view -- always return to full on reload
+  document.getElementById('vtFull').className='vt-btn'+(v==='full'?' active':'');
+  document.getElementById('vtSimple').className='vt-btn'+(v==='simple'?' active':'');
+  document.getElementById('vtLoc').className='vt-btn'+(v==='loc'?' active':'');
+  document.getElementById('abody').style.display=v==='full'?'block':'none';
+  document.getElementById('svWrap').style.display=v==='simple'?'block':'none';
+  document.getElementById('lvWrap').style.display=v==='loc'?'block':'none';
+  if(v==='simple')svRender();
+  if(v==='full')renderAll();
+  if(v==='loc')renderLocView();
+}
+
+// Haversine distance between two lat/lng points in km
+function haversine(lat1,lng1,lat2,lng2){
+  var R=6371,dLat=(lat2-lat1)*Math.PI/180,dLng=(lng2-lng1)*Math.PI/180;
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2);
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+// Compute auto distance: sum haversine between consecutive located entries
+function autoDistance(entries){
+  var pts=entries.filter(function(e){return e.location&&e.location.lat&&e.location.lng;});
+  var total=0;
+  for(var i=1;i<pts.length;i++){
+    var d=haversine(pts[i-1].location.lat,pts[i-1].location.lng,pts[i].location.lat,pts[i].location.lng);
+    if(d>0.05) total+=d; // ignore micro-movements under 50m (GPS jitter)
+  }
+  return total;
+}
+
+function renderLocView(){
+  var body=document.getElementById('lvBody');
+  if(!body)return;
+  if(!S.trips)S.trips=[];
+  var locEntries=S.entries.filter(function(e){return e.location&&(e.location.lat||e.location.address);});
+  var hasAnything=locEntries.length||S.trips.length;
+  if(!hasAnything){
+    body.innerHTML='<div class="lv-empty">&#128205; No location data yet.<br><span style="font-size:12px;margin-top:6px;display:block;">Captured automatically when you clock in, log, or clock out.</span></div>';
+    return;
+  }
+  var todayLabel=new Date().toLocaleDateString('en-CA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  var html='<div class="lv-date-group"><div class="lv-date-hdr"><span>'+todayLabel+'</span><span class="secln"></span></div>';
+
+  // -- Auto distance summary (Option 2) --
+  var autoDist=autoDistance(S.entries);
+  var manualKm=S.trips.reduce(function(sum,t){return sum+(t.unit==='mi'?t.dist*1.60934:t.dist);},0);
+  var totalKm=manualKm; // auto dist is supplemental info only
+  html+='<div class="lv-mile-summary">'
+    +'<div class="lv-mile-auto">GPS movement today: <strong>'+autoDist.toFixed(1)+' km</strong>'
+    +(autoDist>0?' across '+locEntries.length+' location point'+(locEntries.length!==1?'s':''):'')+'</div>'
+    +(manualKm>0?'<div style="font-size:13px;font-weight:600;color:var(--tx);">Logged: '+manualKm.toFixed(1)+' km</div>':'')
+    +'</div>';
+
+  // -- Location entries --
+  if(locEntries.length){
+    locEntries.forEach(function(e){
+      var dot=e.type==='clock-in'?'#2a6e4a':e.type==='clock-out'?'#952020':e.type==='break'?'#b05008':'#1a4f7a';
+      var typeLbl=e.type==='clock-in'?'Clock in':e.type==='clock-out'?'Clock out':e.type==='break'?'Break':'Activity';
+      var typeBg=e.type==='clock-in'?'background:var(--gn-bg);color:var(--gn-dk);':e.type==='clock-out'?'background:var(--rd-bg);color:var(--rd);':e.type==='break'?'background:var(--am-bg);color:var(--am);':'background:var(--bl-bg);color:var(--bl);';
+      var timeStr=e.needsTime?'pending':fmtT(new Date(e.time));
+      var lat=e.location.lat||0,lng=e.location.lng||0;
+      var addr=e.location.address||'';
+      var isCoords=!addr||/^-?[\d]+\.[\d]/.test(addr.trim());
+      var displayAddr=isCoords?(lat.toFixed(5)+', '+lng.toFixed(5)):addr;
+      var mapsUrl='https://maps.google.com/?q='+lat+','+lng;
+      var note=e.note?('<div style="padding:2px 14px 8px;font-size:12px;color:var(--tx2);font-style:italic;">'+esc(e.note)+'</div>'):'';
+      html+='<div class="lv-entry" id="lve_'+e.uid+'">'
+        +'<div class="lv-row">'
+        +'<span class="lv-time">'+timeStr+'</span>'
+        +'<span class="lv-dot" style="background:'+dot+'"></span>'
+        +'<a class="lv-addr-link" id="lvaddr_'+e.uid+'" href="'+mapsUrl+'" target="_blank">'+esc(displayAddr)+'</a>'
+        +'<span class="lv-type" style="'+typeBg+'">'+typeLbl+(e.tag?' &ndash; '+esc(e.tag):'')+'</span>'
+        +'</div>'+note+'</div>';
+    });
+  }
+
+  // -- Trips section (Option 1) --
+  html+='<div class="lv-trips-hdr">'
+    +'<span class="lv-trips-hdr-lbl">&#128663; Trips logged</span>'
+    +'<button class="btn pr sm" onclick="openTripModal()" style="font-size:12px;padding:3px 10px;">+ Log trip</button>'
+    +'</div>';
+  if(S.trips.length){
+    S.trips.forEach(function(t,i){
+      var distLabel=t.dist.toFixed(1)+' '+t.unit;
+      var route=esc(t.from)+(t.to?' &rarr; '+esc(t.to):'');
+      html+='<div class="lv-trip-entry">'
+        +'<div class="lv-trip-dist">'+distLabel+'</div>'
+        +'<div style="flex:1;min-width:0;">'
+        +'<div class="lv-trip-route">'+route+'</div>'
+        +(t.purpose?'<div class="lv-trip-purpose">'+esc(t.purpose)+'</div>':'')
+        +'</div>'
+        +'<button class="lv-trip-del" onclick="deleteTripEntry('+i+')" title="Delete">&#10005;</button>'
+        +'</div>';
+    });
+    var tripTotalKm=S.trips.reduce(function(s,t){return s+(t.unit==='mi'?t.dist*1.60934:t.dist);},0);
+    var tripTotalMi=tripTotalKm/1.60934;
+    html+='<div class="lv-trip-total">Total: '+tripTotalKm.toFixed(1)+' km &nbsp;/&nbsp; '+tripTotalMi.toFixed(1)+' mi</div>';
+  } else {
+    html+='<div style="font-size:13px;color:var(--tx3);padding:8px 0 4px;">No trips logged today.</div>';
+  }
+
+  html+='</div>';
+  body.innerHTML=html;
+
+  // Background street name resolution
+  locEntries.forEach(function(e){
+    var addr=e.location.address||'';
+    var isCoords=!addr||/^-?[\d]+\.[\d]/.test(addr.trim());
+    if(isCoords&&e.location.lat){
+      resolveStreetName(e.uid,e.location.lat,e.location.lng,S.entries,save);
+    }
+  });
+}
+
+// -- Trip modal functions --
+function openTripModal(){
+  var m=document.getElementById('tripModal');
+  if(m){
+    document.getElementById('tripFrom').value='';
+    document.getElementById('tripTo').value='';
+    document.getElementById('tripDist').value='';
+    document.getElementById('tripPurpose').value='';
+    m.classList.add('open');
+  }
+}
+function closeTripModal(){
+  var m=document.getElementById('tripModal');
+  if(m)m.classList.remove('open');
+}
+function saveTripEntry(){
+  if(!S.trips)S.trips=[];
+  var from=(document.getElementById('tripFrom').value||'').trim();
+  var to=(document.getElementById('tripTo').value||'').trim();
+  var dist=parseFloat(document.getElementById('tripDist').value)||0;
+  var unit=document.getElementById('tripUnit').value||'km';
+  var purpose=(document.getElementById('tripPurpose').value||'').trim();
+  if(!dist){alert('Please enter a distance.');return;}
+  if(!from&&!to){alert('Please enter at least a start or end location.');return;}
+  S.trips.push({from:from,to:to,dist:dist,unit:unit,purpose:purpose,time:new Date().toISOString()});
+  save();
+  closeTripModal();
+  renderLocView();
+}
+function deleteTripEntry(idx){
+  if(!S.trips)return;
+  S.trips.splice(idx,1);
+  save();
+  renderLocView();
+}
+
+// Attempt JSONP geocode and update the link text + saved entry if resolved.
+function resolveStreetName(entUid,lat,lng,entries,saveFn){
+  reverseGeocode(lat,lng,function(addr){
+    if(!addr||/^-?[\d]+\.[\d]/.test(addr.trim()))return;
+    var e=entries.find(function(x){return x.uid===entUid;});
+    if(e&&e.location){e.location.address=addr;saveFn();}
+    var el=document.getElementById('lvaddr_'+entUid);
+    if(el)el.textContent=addr;
+    // Update the pin badge in the main timeline too
+    var allBadges=document.querySelectorAll('.loc-badge');
+    for(var i=0;i<allBadges.length;i++){
+      var oc=allBadges[i].getAttribute('onclick')||'';
+      if(oc.indexOf(entUid)>-1){allBadges[i].innerHTML='\uD83D\uDCCD '+addr;break;}
+    }
+  });
+}
+
+// == AERIAL MAP RENDERER ==
+// Deterministic aerial-view canvas from GPS coords.
+// Proper lot subdivision, varied house orientations, driveways/parking.
+
+function _tileXY(lat,lng,z){
+  var n=Math.pow(2,z),lr=lat*Math.PI/180;
+  return{x:Math.floor((lng+180)/360*n),y:Math.floor((1-Math.log(Math.tan(lr)+1/Math.cos(lr))/Math.PI)/2*n),
+    fx:((lng+180)/360)*n,fy:((1-Math.log(Math.tan(lr)+1/Math.cos(lr))/Math.PI)/2)*n};
+}
+function mkRng(seed){
+  var s=(seed|0)||1;
+  return function(){s=Math.imul(s^(s>>>16),0x45d9f3b)|0;s=Math.imul(s^(s>>>16),0x45d9f3b)|0;return((s^(s>>>16))>>>0)/0xffffffff;};
+}
+
+function drawAerialMap(canvas,lat,lng){
+  var W=canvas.width,H=canvas.height;
+  var ctx=canvas.getContext('2d');
+  var t=_tileXY(lat,lng,18);
+  var seed=(Math.imul(t.x,73856093)^Math.imul(t.y,19349663))>>>0;
+  var rng=mkRng(seed);
+
+  // Pin position in canvas coords
+  var fx=t.fx-t.x,fy=t.fy-t.y;
+  var pinX=(fx+1)*W/3,pinY=(fy+1)*H/3;
+
+  // Scale: zoom18 tile ~391m wide at lat50, 3-tile canvas
+  var TILE_M=610*Math.cos(lat*Math.PI/180);
+  var PPM=W/3/TILE_M; // pixels per metre
+
+  // ---- Ground base ----
+  ctx.fillStyle='#7a9e62';ctx.fillRect(0,0,W,H);
+
+  // ---- Street grid ----
+  // Anchor grid to tile integer so same location = same streets
+  var BLOCK=Math.round((110+rng()*50)*PPM); // 110-160m blocks in px
+  var RW=Math.max(7,Math.round(10*PPM));    // road width px (~10m)
+  var SW=Math.max(2,Math.round(1.8*PPM));   // sidewalk width px
+
+  var hSt=[],vSt=[];
+  var offH=Math.round(rng()*BLOCK),offV=Math.round(rng()*BLOCK);
+  for(var y=offH-BLOCK;y<H+BLOCK;y+=Math.round(BLOCK*(0.85+rng()*0.3)))hSt.push(y);
+  for(var x=offV-BLOCK;x<W+BLOCK;x+=Math.round(BLOCK*(0.85+rng()*0.3)))vSt.push(x);
+
+  // Draw ground between streets (lawns in blocks)
+  var allX=[0].concat(vSt).concat([W]);
+  var allY=[0].concat(hSt).concat([H]);
+  for(var bi=0;bi<allX.length-1;bi++){
+    for(var bj=0;bj<allY.length-1;bj++){
+      var bx0=allX[bi],by0=allY[bj],bx1=allX[bi+1],by1=allY[bj+1];
+      var lx=bx0+RW/2+SW+1,ly=by0+RW/2+SW+1;
+      var lw=bx1-bx0-RW-SW*2-2,lh=by1-by0-RW-SW*2-2;
+      if(lw<4||lh<4)continue;
+      // Lawn with slight variation
+      ctx.fillStyle='hsl('+(108+rng()*14)+','+(52+rng()*12)+'%,'+(36+rng()*8)+'%)';
+      ctx.fillRect(lx,ly,lw,lh);
+    }
+  }
+
+  // Road surface
+  function drawRoadH(y,w){
+    ctx.fillStyle='#444';ctx.fillRect(0,y-w/2,W,w);
+    ctx.fillStyle='#3a3a3a';ctx.fillRect(0,y-w/2,W,2);
+    ctx.fillStyle='#3a3a3a';ctx.fillRect(0,y+w/2-2,W,2);
+  }
+  function drawRoadV(x,w){
+    ctx.fillStyle='#444';ctx.fillRect(x-w/2,0,w,H);
+    ctx.fillStyle='#3a3a3a';ctx.fillRect(x-w/2,0,2,H);
+    ctx.fillStyle='#3a3a3a';ctx.fillRect(x+w/2-2,0,2,H);
+  }
+  hSt.forEach(function(y){drawRoadH(y,RW);});
+  vSt.forEach(function(x){drawRoadV(x,RW);});
+
+  // Sidewalks
+  ctx.strokeStyle='#b0a878';ctx.lineWidth=SW;
+  hSt.forEach(function(y){
+    ctx.beginPath();ctx.moveTo(0,y-RW/2-SW/2);ctx.lineTo(W,y-RW/2-SW/2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,y+RW/2+SW/2);ctx.lineTo(W,y+RW/2+SW/2);ctx.stroke();
+  });
+  vSt.forEach(function(x){
+    ctx.beginPath();ctx.moveTo(x-RW/2-SW/2,0);ctx.lineTo(x-RW/2-SW/2,H);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(x+RW/2+SW/2,0);ctx.lineTo(x+RW/2+SW/2,H);ctx.stroke();
+  });
+
+  // Lane markings
+  ctx.save();ctx.setLineDash([Math.round(8*PPM),Math.round(6*PPM)]);
+  ctx.strokeStyle='#e8d060';ctx.lineWidth=Math.max(1,Math.round(PPM));
+  hSt.forEach(function(y){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();});
+  vSt.forEach(function(x){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();});
+  ctx.restore();
+
+  // Intersection boxes (slightly lighter asphalt)
+  hSt.forEach(function(y){
+    vSt.forEach(function(x){
+      ctx.fillStyle='#505050';
+      ctx.fillRect(x-RW/2,y-RW/2,RW,RW);
+    });
+  });
+
+  // ---- Lots & houses ----
+  // For each block, subdivide into lots along each road edge, place a house facing that road
+  var LOT_W=Math.round(13*PPM); // lot frontage ~13m
+  var SET_H=Math.round(5*PPM);  // setback from road ~5m
+  var SET_S=Math.round(2*PPM);  // side setback
+
+  var roofPalette=['#8b3030','#7a2e2e','#6b3c1a','#553018','#9c4040','#704020','#5c4020'];
+  var wallPalette=['#d4c4a0','#c8b890','#ddd0b0','#c0b088','#e0d0b8','#bfad88'];
+
+  function drawHouseRotated(ctx,cx,cy,hw,hh,angle,rng2){
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(angle);
+    // Shadow
+    ctx.fillStyle='rgba(0,0,0,0.22)';
+    ctx.fillRect(-hw/2+3,hh/2-2,hw,3);
+    ctx.fillRect(hw/2-2,-hh/2+3,3,hh);
+    // Walls
+    ctx.fillStyle=wallPalette[Math.floor(rng2()*wallPalette.length)];
+    ctx.fillRect(-hw/2,-hh/2,hw,hh);
+    // Roof -- gabled, ridge runs along the long axis
+    var isWide=hw>=hh;
+    var ridgeInset=Math.round(hh*0.28);
+    ctx.fillStyle=roofPalette[Math.floor(rng2()*roofPalette.length)];
+    if(isWide){
+      // Ridge horizontal
+      ctx.beginPath();
+      ctx.moveTo(-hw/2,-hh/2);ctx.lineTo(-hw/2+ridgeInset,-hh/2+ridgeInset);
+      ctx.lineTo(hw/2-ridgeInset,-hh/2+ridgeInset);ctx.lineTo(hw/2,-hh/2);ctx.closePath();ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-hw/2,hh/2);ctx.lineTo(-hw/2+ridgeInset,hh/2-ridgeInset);
+      ctx.lineTo(hw/2-ridgeInset,hh/2-ridgeInset);ctx.lineTo(hw/2,hh/2);ctx.closePath();ctx.fill();
+      // Ridge line
+      ctx.strokeStyle='rgba(0,0,0,0.25)';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(-hw/2+ridgeInset,-hh/2+ridgeInset);ctx.lineTo(hw/2-ridgeInset,-hh/2+ridgeInset);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(-hw/2+ridgeInset,hh/2-ridgeInset);ctx.lineTo(hw/2-ridgeInset,hh/2-ridgeInset);ctx.stroke();
+    } else {
+      // Ridge vertical
+      ctx.beginPath();
+      ctx.moveTo(-hw/2,-hh/2);ctx.lineTo(-hw/2+ridgeInset,-hh/2+ridgeInset);
+      ctx.lineTo(-hw/2+ridgeInset,hh/2-ridgeInset);ctx.lineTo(-hw/2,hh/2);ctx.closePath();ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(hw/2,-hh/2);ctx.lineTo(hw/2-ridgeInset,-hh/2+ridgeInset);
+      ctx.lineTo(hw/2-ridgeInset,hh/2-ridgeInset);ctx.lineTo(hw/2,hh/2);ctx.closePath();ctx.fill();
+      ctx.strokeStyle='rgba(0,0,0,0.25)';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(-hw/2+ridgeInset,-hh/2+ridgeInset);ctx.lineTo(-hw/2+ridgeInset,hh/2-ridgeInset);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(hw/2-ridgeInset,-hh/2+ridgeInset);ctx.lineTo(hw/2-ridgeInset,hh/2-ridgeInset);ctx.stroke();
+    }
+    // Roof highlight
+    ctx.strokeStyle='rgba(255,255,255,0.13)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(-hw*0.3,-hh*0.35);ctx.lineTo(hw*0.1,-hh*0.42);ctx.stroke();
+    // Garage door or door
+    var hasDr=rng2()>0.4;
+    if(hasDr){
+      var dw=Math.max(3,Math.round(hw*0.28)),dh=Math.max(2,Math.round(hh*0.18));
+      ctx.fillStyle='#6a5030';
+      ctx.fillRect(-dw/2,hh/2-dh-1,dw,dh);
+      ctx.strokeStyle='rgba(0,0,0,0.3)';ctx.lineWidth=0.5;
+      ctx.strokeRect(-dw/2,hh/2-dh-1,dw,dh);
+    }
+    ctx.restore();
+  }
+
+  function drawDriveway(ctx,hx,hy,hw,hh,angle,roadY,roadX,isHouse,rng2){
+    // Draw a parking pad/driveway from house toward the road
+    ctx.save();
+    var dw=Math.max(3,Math.round(hw*0.3));
+    ctx.fillStyle='#8c8470';
+    if(isHouse==='south'||isHouse==='north'){
+      var dy=Math.abs(roadY-hy);
+      ctx.fillRect(hx-dw/2,Math.min(hy,roadY),dw,dy);
+    } else {
+      var dx=Math.abs(roadX-hx);
+      ctx.fillRect(Math.min(hx,roadX),hy-dw/2,dx,dw);
+    }
+    // Parking pad
+    var pw=Math.round(hw*0.55),ph=Math.round(hh*0.35);
+    ctx.fillStyle='#7a7462';
+    if(isHouse==='south') ctx.fillRect(hx-pw/2,roadY-ph,pw,ph);
+    else if(isHouse==='north') ctx.fillRect(hx-pw/2,roadY,pw,ph);
+    else if(isHouse==='east') ctx.fillRect(roadX-pw/2,hy-ph/2,pw/2,ph);
+    else ctx.fillRect(roadX,hy-ph/2,pw/2,ph);
+    ctx.restore();
+  }
+
+  function drawTree(ctx,x,y,r,rng2){
+    ctx.save();
+    ctx.beginPath();ctx.ellipse(x+2,y+3,r*0.9,r*0.55,0,0,Math.PI*2);
+    ctx.fillStyle='rgba(0,0,0,0.2)';ctx.fill();
+    var g=['#2d6a2d','#3a7a3a','#4a8a3a','#346a34','#256025','#3d7030'];
+    ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);
+    ctx.fillStyle=g[Math.floor(rng2()*g.length)];ctx.fill();
+    ctx.beginPath();ctx.arc(x-r*0.22,y-r*0.22,r*0.6,0,Math.PI*2);
+    ctx.fillStyle=g[(Math.floor(rng2()*g.length)+2)%g.length];ctx.fill();
+    ctx.beginPath();ctx.arc(x-r*0.28,y-r*0.3,r*0.28,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,0.1)';ctx.fill();
+    ctx.restore();
+  }
+
+  // Process each block
+  for(var bi=0;bi<allX.length-1;bi++){
+    for(var bj=0;bj<allY.length-1;bj++){
+      var bx0=allX[bi],by0=allY[bj],bx1=allX[bi+1],by1=allY[bj+1];
+      var inner_x=bx0+RW/2+SW+1,inner_y=by0+RW/2+SW+1;
+      var inner_w=bx1-bx0-RW-SW*2-2,inner_h=by1-by0-RW-SW*2-2;
+      if(inner_w<LOT_W||inner_h<LOT_W)continue;
+
+      // Determine lot orientation: houses face the road they're closest to
+      // Top edge: houses face north road (by0), south-facing
+      // Bottom edge: houses face south road (by1), north-facing
+      // Left edge: houses face west road (bx0), east-facing
+      // Right edge: houses face east road (bx1), west-facing
+      var edges=[
+        {side:'north',isH:true, x0:inner_x,y0:inner_y,      len:inner_w, roadY:by0+RW/2, roadX:null},
+        {side:'south',isH:true, x0:inner_x,y0:inner_y+inner_h,len:inner_w,roadY:by1-RW/2, roadX:null},
+        {side:'west', isH:false,x0:inner_x,      y0:inner_y,len:inner_h, roadY:null,    roadX:bx0+RW/2},
+        {side:'east', isH:false,x0:inner_x+inner_w,y0:inner_y,len:inner_h,roadY:null,   roadX:bx1-RW/2},
+      ];
+
+      edges.forEach(function(edge){
+        // Skip some edges for variety
+        if(rng()<0.2)return;
+        var lotF=Math.round(LOT_W*(0.9+rng()*0.5));
+        var nLots=Math.floor(edge.len/lotF);
+        if(nLots<1)return;
+        for(var li=0;li<nLots;li++){
+          var lr2=mkRng(seed^((bi*31+bj)*97+li*13+(edge.side.charCodeAt(0))))();
+          var rng2=mkRng(seed^((bi*31+bj)*97+li*13+(edge.side.charCodeAt(0)*7)));
+          // Vary lot width slightly
+          var thisLotF=Math.round(lotF*(0.8+rng2()*0.4));
+          var offset=li*lotF+Math.round(rng2()*4);
+          if(offset+thisLotF>edge.len)continue;
+
+          // House dimensions
+          var hw=Math.round(thisLotF*(0.45+rng2()*0.15));
+          var hh=Math.round(Math.min(inner_w,inner_h)*(0.32+rng2()*0.18));
+
+          // House centre position
+          var hcx,hcy,face;
+          if(edge.isH){
+            hcx=edge.x0+offset+thisLotF/2;
+            if(edge.side==='north'){
+              hcy=edge.y0+SET_H+hh/2;face='south';
+            } else {
+              hcy=edge.y0-SET_H-hh/2;face='north';
+            }
+          } else {
+            hcy=edge.y0+offset+thisLotF/2;
+            if(edge.side==='west'){
+              hcx=edge.x0+SET_H+hw/2;face='east';
+            } else {
+              hcx=edge.x0-SET_H-hw/2;face='west';
+            }
+          }
+
+          // Clip to block interior
+          var margin=3;
+          if(hcx-hw/2<inner_x-margin||hcx+hw/2>inner_x+inner_w+margin)continue;
+          if(hcy-hh/2<inner_y-margin||hcy+hh/2>inner_y+inner_h+margin)continue;
+
+          // Angle: mostly 0 but slight random rotation for variety
+          var baseAngle=0;
+          var jitter=(rng2()-0.5)*0.06; // up to ~3.5deg
+          drawHouseRotated(ctx,hcx,hcy,hw,hh,baseAngle+jitter,rng2);
+
+          // Driveway toward the road
+          drawDriveway(ctx,hcx,hcy,hw,hh,0,edge.roadY,edge.roadX,face,rng2);
+
+          // 1-2 trees per lot
+          var nt=Math.floor(rng2()*2)+1;
+          for(var ti=0;ti<nt;ti++){
+            var tx=hcx+(rng2()-0.5)*thisLotF*0.6;
+            var ty=hcy+(rng2()-0.5)*(hh+SET_H)*0.8;
+            if(tx>inner_x&&tx<inner_x+inner_w&&ty>inner_y&&ty<inner_y+inner_h)
+              drawTree(ctx,tx,ty,Math.round(4+rng2()*4),rng2);
+          }
+        }
+      });
+
+      // Extra scattered trees in open areas
+      var nFree=Math.floor(rng()*3);
+      for(var ti=0;ti<nFree;ti++){
+        var tx=inner_x+rng()*inner_w,ty=inner_y+rng()*inner_h;
+        drawTree(ctx,tx,ty,Math.round(4+rng()*5),rng);
+      }
+    }
+  }
+
+  // ---- Pin ----
+  var PR=Math.max(5,Math.round(5.5*PPM));
+  ctx.beginPath();ctx.arc(pinX,pinY,PR*2.2,0,Math.PI*2);
+  ctx.fillStyle='rgba(230,57,70,0.18)';ctx.fill();
+  ctx.strokeStyle='rgba(230,57,70,0.55)';ctx.lineWidth=1.5;ctx.stroke();
+  // Pin body
+  ctx.beginPath();
+  ctx.arc(pinX,pinY-PR*2.0,PR,0,Math.PI*2);
+  ctx.fillStyle='#e63946';ctx.fill();
+  ctx.strokeStyle='#fff';ctx.lineWidth=1.8;ctx.stroke();
+  ctx.beginPath();ctx.arc(pinX,pinY-PR*2.0,PR*0.4,0,Math.PI*2);
+  ctx.fillStyle='#fff';ctx.fill();
+  // Stem
+  ctx.beginPath();
+  ctx.moveTo(pinX-PR*0.6,pinY-PR*2.0+PR*0.75);
+  ctx.quadraticCurveTo(pinX-PR*0.4,pinY-PR*0.5,pinX,pinY);
+  ctx.moveTo(pinX+PR*0.6,pinY-PR*2.0+PR*0.75);
+  ctx.quadraticCurveTo(pinX+PR*0.4,pinY-PR*0.5,pinX,pinY);
+  ctx.fillStyle='#e63946';ctx.fill();
+
+  // ---- Overlays ----
+  ctx.save();
+  // Coord label
+  ctx.fillStyle='rgba(0,0,0,0.55)';
+  ctx.beginPath();
+  if(ctx.roundRect)ctx.roundRect(6,H-21,W-12,16,4);
+  else ctx.rect(6,H-21,W-12,16);
+  ctx.fill();
+  ctx.fillStyle='#fff';ctx.font='bold '+Math.max(9,Math.round(9*PPM*1.5))+'px DM Mono,monospace';ctx.textAlign='center';
+  ctx.fillText(lat.toFixed(5)+',  '+lng.toFixed(5),W/2,H-10);
+  // Compass
+  ctx.fillStyle='rgba(0,0,0,0.5)';
+  ctx.beginPath();
+  if(ctx.roundRect)ctx.roundRect(W-22,5,17,17,3);
+  else ctx.rect(W-22,5,17,17);
+  ctx.fill();
+  ctx.fillStyle='#fff';ctx.font='bold 11px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('N',W-13,14);
+  ctx.restore();
+}
+
+function lvToggle(uid,lat,lng){
+  var entry=document.getElementById('lve_'+uid);
+  var detail=document.getElementById('lvd_'+uid);
+  var mapEl=document.getElementById('lvmap_'+uid);
+  if(!entry||!detail)return;
+  var isOpen=entry.classList.contains('open');
+  document.querySelectorAll('.lv-entry.open').forEach(function(el){el.classList.remove('open');});
+  if(!isOpen){
+    entry.classList.add('open');
+    if(mapEl&&!mapEl.dataset.loaded){
+      mapEl.dataset.loaded='1';
+      mapEl.style.display='block';
+      mapEl.innerHTML='';
+      var DPR=window.devicePixelRatio||2;
+      var W=Math.min((detail.offsetWidth||320)-4,400);
+      var H=Math.round(W*0.58);
+      var canvas=document.createElement('canvas');
+      canvas.width=Math.round(W*DPR);canvas.height=Math.round(H*DPR);
+      canvas.style.cssText='width:'+W+'px;height:'+H+'px;border-radius:var(--r);display:block;border:1px solid #555;margin:10px 0 8px;';
+      var ctx=canvas.getContext('2d');ctx.scale(DPR,DPR);
+      mapEl.appendChild(canvas);
+      mapEl.className='lv-map';mapEl.style.height='auto';
+      drawAerialMap(canvas,lat,lng);
+    }
+  }
+}
+
+// == Simplified view functions ==
+function svRender(){
+  const nm=document.getElementById('svName');
+  nm.textContent=empName?(empName+"'s log"):"Today's log";
+  nm.style.color=empColor||'var(--tx)';
+  document.getElementById('svDate').textContent=fmtDate(todayKey());
+  const ins=S.entries.filter(e=>e.type==='clock-in');
+  const outs=S.entries.filter(e=>e.type==='clock-out');
+  const hasStarted=ins.length>0;
+  document.getElementById('svStats').style.display=hasStarted?'grid':'none';
+  document.getElementById('svIn').textContent=ins.length?fmtT(new Date(ins[0].time)):'--:--';
+  document.getElementById('svOut').textContent=outs.length?fmtT(new Date(outs[outs.length-1].time)):'--:--';
+  document.getElementById('svTotal').textContent=fmtDur(calcWorked(S.entries));
+  document.getElementById('svSess').textContent=ins.length;
+  document.getElementById('svDot').className='sv-sdot'+(S.clocked?' on':'');
+  const n=ins.length;
+  document.getElementById('svStxt').textContent=S.clocked?(n>1?'Clocked in  -  session '+n:'Clocked in  -  working'):(ins.length?'Clocked out':'Not clocked in');
+  document.getElementById('svBtnIn').style.display=S.clocked?'none':'flex';
+  document.getElementById('svBtnLog').style.display=S.clocked?'flex':'none';
+  document.getElementById('svBtnOut').style.display=S.clocked?'flex':'none';
+}
+
+function svClockIn(){clockIn();svRender();}
+function svClockOut(){clockOut();svRender();}
+function svOpenLog(){document.getElementById('svLogForm').classList.add('open');document.getElementById('svCat').value='';document.getElementById('svNote').value='';}
+function svCloseLog(){
+  document.getElementById('svLogForm').classList.remove('open');
+  ['svCat','svNote','svPI','svPQ','svPA','svSI','svSQ','svSA','svCLn','svCLp','svCLh'].forEach(function(x){var el=document.getElementById(x);if(el)el.value='';});
+  ['svPS','svSS','svCL'].forEach(function(x){var el=document.getElementById(x);if(el)el.classList.remove('open');});
+}
+function svSubmitLog(){
+  const tag=document.getElementById('svCat').value.trim();
+  const note=document.getElementById('svNote').value.trim();
+  if(!tag&&!note)return;
+  const isBreak=BRK.some(w=>(tag+' '+note).toLowerCase().includes(w));
+  const t=new Date();
+  // collect materials
+  const mats=[];
+  const pi=(document.getElementById('svPI')&&document.getElementById('svPI').value||'').trim();
+  if(pi){const r={item:pi,qty:document.getElementById('svPQ').value||'1',cost:document.getElementById('svPA').value||'0'};S.purchases.push(r);mats.push({kind:'purchase',...r});}
+  const si=(document.getElementById('svSI')&&document.getElementById('svSI').value||'').trim();
+  if(si){const r={item:si,qty:document.getElementById('svSQ').value||'1',cost:document.getElementById('svSA').value||'0'};S.supplies.push(r);mats.push({kind:'supply',...r});}
+  var svCLopen=document.getElementById('svCL')&&document.getElementById('svCL').classList.contains('open');
+  var svEntClient=svCLopen?colClient('sv',S):null;
+  const svEnt={uid:uid(),type:isBreak?'break':'task',tag,note,time:t,manual:false,needsTime:false,section:isMorn(t)?'morning':'afternoon',materials:mats,client:svEntClient};
+  S.entries.push(svEnt);
+  autoFillClientHours(S.entries,S);
+  save();svCloseLog();svRender();
+  geoTagEntry(svEnt.uid,S.entries,save);
+}
+
+// -- Category manager ------------------------------------------
+function openCatModal(){
+  renderCatList();
+  document.getElementById('catModal').classList.add('open');
+}
+function closeCatModal(){
+  document.getElementById('catModal').classList.remove('open');
+  // Rebuild all category selects on page
+  rebuildCatSelects();
+}
+function renderCatList(){
+  var list=document.getElementById('catList');
+  list.innerHTML='';
+  CATS.forEach(function(cat,i){
+    var row=document.createElement('div');
+    row.className='catrow';
+    row.innerHTML='<span class="catrow-name">'+esc(cat)+'</span>'
+      +(i>0?'<button class="catdel" onclick="catMoveUp('+i+')" title="Move up">^</button>':'<span style="width:28px;display:inline-block;"></span>')
+      +'<button class="catdel" onclick="catDel('+i+')" title="Delete" style="color:var(--rd);">x</button>';
+    list.appendChild(row);
+  });
+}
+function catDel(i){
+  CATS.splice(i,1);saveCats();renderCatList();
+}
+function catMoveUp(i){
+  if(i<=0)return;
+  var tmp=CATS[i];CATS[i]=CATS[i-1];CATS[i-1]=tmp;
+  saveCats();renderCatList();
+}
+function catAdd(){
+  var inp=document.getElementById('catNewInput');
+  var v=(inp.value||'').trim();
+  if(!v)return;
+  if(!CATS.includes(v))CATS.push(v);
+  saveCats();inp.value='';renderCatList();
+}
+function buildCatOptions(selectedVal){
+  return CATS.map(function(c){return '<option'+(c===selectedVal?' selected':'')+'>'+esc(c)+'</option>';}).join('');
+}
+function rebuildCatSelects(){
+  // Rebuild all visible category dropdowns
+  var ids=['lfC','mfC','svCat','dvMfC'];
+  ids.forEach(function(id){
+    var el=document.getElementById(id);
+    if(!el)return;
+    var cur=el.value;
+    el.innerHTML='<option value="">-- pick --</option>'+buildCatOptions(cur);
+  });
+}
+
+
+// -- Client preset manager --
+function buildClientBtns(pfxOrDivId){
+  // pfxOrDivId can be 'lf','mf','sv' (looks for pfx+'CLbtns' and pfx+'CLn')
+  // OR a full div id like 'ee_cl_abc123_btns' for edit form
+  var isEditForm=pfxOrDivId.indexOf('ee_cl_')===0;
+  var btnsDiv, inpId;
+  if(isEditForm){
+    btnsDiv=document.getElementById(pfxOrDivId+'_btns');
+    inpId=pfxOrDivId.replace('ee_cl_','ee_cln_');
+  } else {
+    btnsDiv=document.getElementById(pfxOrDivId+'CLbtns');
+    inpId=pfxOrDivId+'CLn';
+  }
+  if(!btnsDiv)return;
+  btnsDiv.innerHTML='';
+  // Add a "None / Remove" button first
+  var none=document.createElement('button');
+  none.className='btn xs';none.style.cssText='padding:4px 10px;font-size:12px;';
+  none.textContent='None';
+  none.onclick=function(){
+    var inp=document.getElementById(inpId);if(inp)inp.value='';
+    btnsDiv.querySelectorAll('button').forEach(function(x){x.style.background='';x.style.color='';});
+    none.style.background='var(--rd)';none.style.color='#fff';
+  };
+  btnsDiv.appendChild(none);
+  CLIENT_PRESETS.forEach(function(name){
+    var b=document.createElement('button');
+    b.className='btn xs';
+    b.style.cssText='padding:4px 10px;font-size:12px;';
+    b.textContent=name;
+    // highlight if currently selected
+    var inp0=document.getElementById(inpId);
+    if(inp0&&inp0.value===name){b.style.background='var(--pu)';b.style.color='#fff';}
+    b.onclick=function(){
+      var inp=document.getElementById(inpId);
+      if(!inp)return;
+      if(inp.value===name){inp.value='';b.style.background='';b.style.color='';}
+      else{inp.value=name;
+        btnsDiv.querySelectorAll('button').forEach(function(x){x.style.background='';x.style.color='';});
+        b.style.background='var(--pu)';b.style.color='#fff';
+      }
+    };
+    btnsDiv.appendChild(b);
+  });
+}
+
+function colClient(pfx,st){
+  var name=((document.getElementById(pfx+'CLn')||{}).value||'').trim();
+  if(!name)return null;
+  var proj=((document.getElementById(pfx+'CLp')||{}).value||'').trim();
+  var hrsRaw=((document.getElementById(pfx+'CLh')||{}).value||'').trim();
+  var hrs=parseFloat(hrsRaw)||0;
+  var hoursManual=hrsRaw!=='';  // manual if user typed something
+  // Add/update client in the day's client list
+  var existing=null;
+  for(var k=0;k<st.clients.length;k++){if(st.clients[k].client===name){existing=st.clients[k];break;}}
+  if(existing){
+    if(hrs>0)existing.hours=String(parseFloat(existing.hours||0)+hrs);
+    if(proj&&!existing.project)existing.project=proj;
+  } else {
+    st.clients.push({client:name,project:proj,hours:String(hrs)});
+  }
+  return {name:name,project:proj,hours:hrs,hoursManual:hoursManual};
+}
+
+function openCliPresetModal(){
+  renderCliPresetList();
+  document.getElementById('cliPresetModal').classList.add('open');
+}
+function closeCliPresetModal(){
+  document.getElementById('cliPresetModal').classList.remove('open');
+}
+function renderCliPresetList(){
+  var list=document.getElementById('cliPresetList');
+  if(!list)return;list.innerHTML='';
+  CLIENT_PRESETS.forEach(function(name,i){
+    var row=document.createElement('div');row.className='catrow';
+    var inp=document.createElement('input');inp.type='text';inp.value=name;
+    inp.style.cssText='flex:1;padding:5px 8px;font-size:13px;border:1px solid var(--bd2);border-radius:var(--r);background:var(--sf2);font-family:inherit;';
+    inp.oninput=function(){CLIENT_PRESETS[i]=inp.value;saveClientPresets();};
+    var del=document.createElement('button');del.className='catdel';del.textContent='x';
+    del.style.color='var(--rd)';
+    del.onclick=function(){CLIENT_PRESETS.splice(i,1);saveClientPresets();renderCliPresetList();};
+    row.appendChild(inp);row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+function cliPresetAdd(){
+  var inp=document.getElementById('cliPresetNewInput');
+  var v=(inp.value||'').trim();if(!v)return;
+  CLIENT_PRESETS.push(v);saveClientPresets();inp.value='';renderCliPresetList();
+}
+
+function toggleMoreMenu(){
+  var m=document.getElementById('moreModal');
+  if(m)m.classList.toggle('open');
+}
+function closeMoreMenu(){
+  var m=document.getElementById('moreModal');
+  if(m)m.classList.remove('open');
+}
+
+// == Location detail popup ==
+function showLocDetail(entUid, address, lat, lng) {
+  var modal = document.getElementById('locModal');
+  var addrEl = document.getElementById('locModalAddr');
+  var mapLink = document.getElementById('locModalMap');
+  if (!modal) return;
+  addrEl.textContent = address;
+  var mapsUrl = 'https://maps.google.com/?q=' + lat + ',' + lng;
+  mapLink.href = mapsUrl;
+  mapLink.textContent = lat.toFixed(5) + ', ' + lng.toFixed(5);
+  modal.classList.add('open');
+}
+function closeLocModal() {
+  var modal = document.getElementById('locModal');
+  if (modal) modal.classList.remove('open');
+}
+
+setInterval(()=>{
+  const el=document.getElementById('clk');if(el)el.textContent=fmtLive(new Date());
+  if(S.clocked){
+    const el2=document.getElementById('sTotal');if(el2)el2.textContent=fmtDur(calcWorked(S.entries));
+    if(currentView==='simple'){const sv=document.getElementById('svTotal');if(sv)sv.textContent=fmtDur(calcWorked(S.entries));}
+  }
+},1000);
+
+loadPrefs();
+loadCats();
+loadClientPresets();
+buildSw('wSwatches',wColor,c=>{wColor=c;wPrev();});
+wPrev();
+// Populate category selects from CATS array
+function initCatSelects(){
+  var selIds=['lfC','mfC','svCat','dvMfC'];
+  selIds.forEach(function(id){
+    var el=document.getElementById(id);
+    if(!el)return;
+    el.innerHTML='<option value="">-- pick --</option>'+buildCatOptions('');
+  });
+}
+if(empName){
+  S=loadDay(todayKey());
+  showPage('pgApp');
+  const savedView=_lsGet('ts_view')||'full';
+  currentView=savedView;
+  if(savedView==='simple'){
+    document.getElementById('vtFull').className='vt-btn';
+    document.getElementById('vtSimple').className='vt-btn active';
+    document.getElementById('vtLoc').className='vt-btn';
+    document.getElementById('abody').style.display='none';
+    document.getElementById('svWrap').style.display='block';
+    document.getElementById('lvWrap').style.display='none';
+    svRender();
+  } else {
+    document.getElementById('vtLoc').className='vt-btn';
+    renderAll();
+  }
+}
+else showPage('pgWelcome');
+
+// PWA: show a one-time install nudge banner on non-standalone Safari
+(function(){
+  var isStandalone=window.navigator.standalone===true;
+  var isSafari=/^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  var dismissed=_lsGet('ts_pwa_dismissed');
+  if(!isStandalone&&isSafari&&!dismissed){
+    var bar=document.createElement('div');
+    bar.id='pwa-bar';
+    bar.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#1b4332;color:#fff;font-size:13px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:9999;';
+    bar.innerHTML='<span>&#128640; Tap <strong>Share</strong> then <strong>Add to Home Screen</strong> to install as an app</span>'
+      +'<button onclick="this.parentNode.remove();_lsSet(\'ts_pwa_dismissed\',\'1\')" style="background:none;border:1px solid rgba(255,255,255,.5);color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap;">Got it</button>';
+    document.body.appendChild(bar);
+  }
+})();
+</script>
+</body>
+</html>
