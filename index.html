@@ -383,6 +383,7 @@ textarea{resize:vertical;min-height:78px;}
         <button class="vt-btn active" id="vtSimple" onclick="setView('simple')">Simple View</button>
         <button class="vt-btn" id="vtFull" onclick="setView('full')">Details View</button>
         <button class="vt-btn" id="vtLoc" onclick="setView('loc')">&#128205; Locations</button>
+        <button class="vt-btn" id="vtPhoto" onclick="setView('photo')">&#128247; Photos</button>
       </div>
       <button class="btn sm no-print" onclick="toggleMoreMenu()" title="More options" style="padding:5px 11px;font-size:16px;letter-spacing:2px;line-height:1;">&#8943;</button>
     </div>
@@ -584,6 +585,11 @@ textarea{resize:vertical;min-height:78px;}
 <!-- LOCATION VIEW (inside pgApp, toggled by setView) -->
 <div id="lvWrap" style="display:none;">
   <div class="lv-wrap" id="lvBody"></div>
+</div>
+
+<!-- PHOTOS VIEW -->
+<div id="pvWrap" style="display:none;">
+  <div class="lv-wrap" id="pvBody"></div>
 </div>
 
 <!-- TRIP LOG MODAL -->
@@ -1238,18 +1244,10 @@ function buildEnt(e,total,st,savFn,renFn,editable){
     </div></div>`;
   } else {
     const secBtn=isNT&&editable?`<button class="ibtn" style="font-size:11px;color:var(--am);" onclick="toggleEntrySection('${e.uid}')" title="Move to ${e.section==='morning'?'Afternoon':'Morning'}">${e.section==='morning'?'\uD83C\uDF05->Aftn':'\u2600->Morn'}</button>`:'';
-    if(e.type==='photo'){
-      div.innerHTML=arrs+`<div class="edot" style="background:${dot}"></div><span class="etime">${timeStr}</span>
-      <div class="ebody"><div class="emain"><span class="elbl">\uD83D\uDCF7 Photo</span><div class="badges">${badges}</div>
-        <div class="eacts">${editable?`<button class="ibtn del" onclick="delByUid('${e.uid}',_activeSt,_activeSav,_activeRen)">x</button>`:''}</div>
-      </div>${(cliH||locH)?`<div class="matnotes">${cliH}${locH}</div>`:''}
-      ${buildPhotoEntryBody(e,editable)}</div>`;
-    } else {
     div.innerHTML=arrs+`<div class="edot" style="background:${dot}"></div><span class="etime${isNT?' needsT':''}">${timeStr}</span>
     <div class="ebody"><div class="emain"><span class="elbl">${lbl}</span><div class="badges">${badges}</div>
       <div class="eacts">${secBtn}${canEd?`<button class="ibtn" onclick="startEditByUid('${e.uid}')">Edit</button>`:''}${editable?`<button class="ibtn del" onclick="delByUid('${e.uid}',_activeSt,_activeSav,_activeRen)">x</button>`:''}</div>
     </div>${(matH||cliH||locH)?`<div class="matnotes">${matH}${cliH}${locH}</div>`:''}</div>`;
-    }
   }
   return div;
 }
@@ -1260,7 +1258,10 @@ function renderTL(st,savFn,renFn,editable,wrapId){
   reassignSections(st.entries);
   const total=st.entries.length;
   const mornIdx=[],aftnIdx=[];
-  st.entries.forEach((e,i)=>{(e.section==='morning'?mornIdx:aftnIdx).push(i);});
+  st.entries.forEach((e,i)=>{
+    if(e.type==='photo')return; // photos shown in Photos view only
+    (e.section==='morning'?mornIdx:aftnIdx).push(i);
+  });
   function makeSec(label,indices,empty){
     const sec=document.createElement('div');sec.className='daysec';
     sec.innerHTML=`<div class="sechdr"><span class="sectit">${label}</span><div class="secln"></div></div>`;
@@ -1655,12 +1656,10 @@ function savePhotos(dayKey,photos){
   catch(e){if(e.name==='QuotaExceededError')alert('Storage full - older photos may need to be cleared.');}
 }
 
-// Called from the camera button (not tied to a specific entry)
-// Creates a new 'photo' entry in S.entries, then attaches files to it
+// Called from the camera button \u2014 creates a Photo entry then attaches files
 function openPhotoCaptureFromBtn(fileInput){
   var files=fileInput.files;
-  if(!files||!files.length)return;
-  // Create a new photo entry
+  if(!files||!files.length){fileInput.value='';return;}
   var t=new Date();
   var entUid=uid();
   var photoEntry={
@@ -1677,14 +1676,17 @@ function openPhotoCaptureFromBtn(fileInput){
     location:null
   };
   S.entries.push(photoEntry);
-  // Attach GPS location
+  save();
+  // Attach GPS silently
   geoTagEntry(entUid,S.entries,save);
-  // Save files to photo store
+  // Attach files \u2014 render photo view when done
   attachFilesToEntry(entUid,todayKey(),files,function(){
     save();
-    renderAll();
+    // Re-render whichever view is active
+    if(currentView==='photo') renderPhotoView();
+    else if(currentView==='full') renderAll();
+    else if(currentView==='simple') svRender();
   });
-  // Reset input
   fileInput.value='';
 }
 
@@ -1830,16 +1832,20 @@ function deleteCurrentPhoto(){
 let currentView='full';
 function setView(v){
   currentView=v;
-  _lsSet('ts_view',v==='loc'?'full':v); // don't persist loc view -- always return to full on reload
+  // Persist simple/full only; photo/loc always revert to simple on reload
+  if(v==='simple'||v==='full') _lsSet('ts_view',v);
   document.getElementById('vtFull').className='vt-btn'+(v==='full'?' active':'');
   document.getElementById('vtSimple').className='vt-btn'+(v==='simple'?' active':'');
   document.getElementById('vtLoc').className='vt-btn'+(v==='loc'?' active':'');
+  document.getElementById('vtPhoto').className='vt-btn'+(v==='photo'?' active':'');
   document.getElementById('abody').style.display=v==='full'?'block':'none';
   document.getElementById('svWrap').style.display=v==='simple'?'block':'none';
   document.getElementById('lvWrap').style.display=v==='loc'?'block':'none';
+  document.getElementById('pvWrap').style.display=v==='photo'?'block':'none';
   if(v==='simple')svRender();
   if(v==='full')renderAll();
   if(v==='loc')renderLocView();
+  if(v==='photo')renderPhotoView();
 }
 
 // Haversine distance between two lat/lng points in km
@@ -1978,6 +1984,76 @@ function deleteTripEntry(idx){
   S.trips.splice(idx,1);
   save();
   renderLocView();
+}
+
+// Attempt JSONP geocode and update the link text + saved entry if resolved.
+function renderPhotoView(){
+  var body=document.getElementById('pvBody');
+  if(!body)return;
+  var dayKey=todayKey();
+  var photoEntries=S.entries.filter(function(e){return e.type==='photo';});
+  if(!photoEntries.length){
+    body.innerHTML='<div class="lv-empty">&#128247; No photos yet.<br><span style="font-size:12px;margin-top:6px;display:block;">Tap the &#128247; button to take or attach a photo.</span></div>';
+    return;
+  }
+  var todayLabel=new Date().toLocaleDateString('en-CA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  var html='<div class="lv-date-group"><div class="lv-date-hdr"><span>'+todayLabel+'</span><span class="secln"></span>'
+    +'<label style="font-size:12px;padding:2px 10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);cursor:pointer;">&#128247; Add<input type="file" accept="image/*,video/*" capture="environment" multiple style="display:none;" onchange="openPhotoCaptureFromBtn(this)"></label>'
+    +'</div>';
+  photoEntries.forEach(function(e){
+    var groups=loadPhotos(dayKey)[e.uid]||[];
+    var totalFiles=groups.reduce(function(n,g){return n+g.files.length;},0);
+    var addr=e.location&&e.location.address||'';
+    var isCoords=!addr||/^-?[\d]+\.[\d]/.test(addr.trim());
+    var locLine=addr?('<div style="font-size:12px;color:var(--tl);margin:4px 0;">\uD83D\uDCCD '+(isCoords?addr:addr)+'</div>'):'';
+    var clientLine=(e.client&&e.client.name)?('<div style="font-size:12px;color:var(--pu);margin:2px 0;">'+(e.client.name)+(e.client.project?' \u2013 '+e.client.project:'')+'</div>'):'';
+    html+='<div class="card" style="margin-bottom:10px;">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
+      +'<div>'
+      +'<span style="font-weight:600;font-size:14px;">\uD83D\uDCF7 Photo</span>'
+      +'<span style="font-size:11px;color:var(--tx3);margin-left:8px;">'+fmtT(new Date(e.time))+'</span>'
+      +(totalFiles>0?'<span style="font-size:11px;color:var(--tx3);margin-left:6px;">\u2022 '+totalFiles+' file'+(totalFiles>1?'s':'')+'</span>':'')
+      +'</div>'
+      +'<button class="ibtn del" onclick="deletePhotoEntry(\''+e.uid+'\',\''+dayKey+'\')">x</button>'
+      +'</div>'
+      +locLine+clientLine
+      +'<div class="photo-strip">';
+    groups.forEach(function(g){
+      if(!g.files.length)return;
+      var start=new Date(g.startTime);
+      var end=new Date(g.files[g.files.length-1].ts);
+      var lbl=fmtT(start)+(g.files.length>1?(' \u2013 '+fmtT(end)):'');
+      var countTxt=g.files.length>1?(g.files.length+' items \u2022 '):'';
+      html+='<div class="photo-group-lbl">'+countTxt+lbl+'</div>';
+      g.files.forEach(function(f){
+        var isVid=f.type&&f.type.indexOf('video')===0;
+        html+='<div class="photo-thumb" onclick="openPhViewer(\''+e.uid+'\',\''+g.gid+'\',\''+f.fid+'\',\''+dayKey+'\')">'
+          +(isVid
+            ?'<video src="'+f.dataUrl+'" style="width:100%;height:100%;object-fit:cover;" muted playsinline></video><span class="ph-vid-badge">&#9654;</span>'
+            :'<img src="'+f.dataUrl+'" alt="photo">')
+          +'</div>';
+      });
+    });
+    // Add more photos button
+    html+='<label class="photo-add-btn" title="Add more photos to this entry">&#128247;'
+      +'<input type="file" accept="image/*,video/*" capture="environment" multiple style="display:none;" '
+      +'onchange="addMorePhotos(\''+e.uid+'\',this)"></label>';
+    html+='</div></div>';
+  });
+  html+='</div>';
+  body.innerHTML=html;
+}
+
+function deletePhotoEntry(entUid,dayKey){
+  if(!confirm('Delete this photo entry and all its photos?'))return;
+  // Remove files from storage
+  var all=loadPhotos(dayKey);
+  delete all[entUid];
+  savePhotos(dayKey,all);
+  // Remove entry from S
+  S.entries=S.entries.filter(function(e){return e.uid!==entUid;});
+  save();
+  renderPhotoView();
 }
 
 // Attempt JSONP geocode and update the link text + saved entry if resolved.
@@ -2599,19 +2675,7 @@ if(empName){
   S=loadDay(todayKey());
   showPage('pgApp');
   const savedView=_lsGet('ts_view')||'simple';
-  currentView=savedView;
-  if(savedView==='simple'){
-    document.getElementById('vtFull').className='vt-btn';
-    document.getElementById('vtSimple').className='vt-btn active';
-    document.getElementById('vtLoc').className='vt-btn';
-    document.getElementById('abody').style.display='none';
-    document.getElementById('svWrap').style.display='block';
-    document.getElementById('lvWrap').style.display='none';
-    svRender();
-  } else {
-    document.getElementById('vtLoc').className='vt-btn';
-    renderAll();
-  }
+  setView(savedView);
 }
 else showPage('pgWelcome');
 
