@@ -170,7 +170,9 @@ textarea{resize:vertical;min-height:78px;}
 .ph-viewer-bar{position:absolute;top:0;left:0;right:0;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;}
 .ph-viewer-close{color:#fff;font-size:22px;cursor:pointer;background:none;border:none;padding:4px 8px;}
 .ph-viewer-del{color:#fda4a4;font-size:13px;cursor:pointer;background:none;border:1px solid rgba(253,164,164,.4);padding:4px 10px;border-radius:6px;}
-.ph-viewer-info{color:rgba(255,255,255,.6);font-size:11px;text-align:center;margin-top:10px;}
+.b-photo{background:#ede8fc;color:#5c3d8a;border-color:#c4b8f0;}
+/* Photo viewer metadata */
+.ph-viewer-info{color:rgba(255,255,255,.75);font-size:12px;text-align:left;line-height:1.7;}
 .mnt{font-size:11px;padding:2px 7px;border-radius:4px;border-left:2px solid;}
 .mnt.pur{background:var(--tl-bg);border-color:var(--tl);color:var(--tl);}
 .mnt.sup{background:var(--bl-bg);border-color:var(--bl);color:var(--bl);}
@@ -387,6 +389,7 @@ textarea{resize:vertical;min-height:78px;}
   </div>
   <div class="abody" id="abody">
     <div style="text-align:right;margin-bottom:6px;display:flex;justify-content:flex-end;gap:8px;">
+      <label class="catman-btn" style="font-size:12px;padding:3px 8px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);cursor:pointer;" title="Take or attach photo">&#128247;<input type="file" accept="image/*,video/*" capture="environment" multiple style="display:none;" onchange="openPhotoCaptureFromBtn(this)"></label>
       <button class="catman-btn" onclick="openCliPresetModal()" style="font-size:12px;padding:3px 8px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);">&#128203; Clients</button>
       <button class="catman-btn" onclick="openCatModal()" style="font-size:12px;padding:3px 8px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);">&#9776; Categories</button>
     </div>
@@ -475,6 +478,7 @@ textarea{resize:vertical;min-height:78px;}
   <div class="sv-wrap">
     <!-- 1. Buttons -->
     <div style="width:100%;max-width:380px;display:flex;justify-content:flex-end;gap:8px;margin-bottom:4px;">
+      <label class="catman-btn" style="font-size:12px;padding:3px 6px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);cursor:pointer;" title="Take or attach photo">&#128247;<input type="file" accept="image/*,video/*" capture="environment" multiple style="display:none;" onchange="openPhotoCaptureFromBtn(this)"></label>
       <button class="catman-btn" onclick="openCliPresetModal()" style="font-size:12px;padding:3px 6px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);">&#128203; Clients</button>
       <button class="catman-btn" onclick="openCatModal()" style="font-size:12px;padding:3px 6px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);">&#9776; Categories</button>
     </div>
@@ -690,8 +694,8 @@ function loadClientPresets(){
   if(raw){try{var arr=JSON.parse(raw);if(arr&&arr.length)CLIENT_PRESETS=arr;}catch(e){}}
 }
 function saveClientPresets(){_lsSet('ts_client_presets',JSON.stringify(CLIENT_PRESETS));}
-const EDOT={'clock-in':'#2a6e4a','clock-out':'#952020','task':'#1a4f7a','break':'#b05008'};
-const ELAB={'clock-in':'Clock in','clock-out':'Clock out','task':'Activity','break':'Break'};
+const EDOT={'clock-in':'#2a6e4a','clock-out':'#952020','task':'#1a4f7a','break':'#b05008','photo':'#5c3d8a'};
+const ELAB={'clock-in':'Clock in','clock-out':'Clock out','task':'Activity','break':'Break','photo':'Photo'};
 const BRK=['break','lunch'];
 const SWS=[{l:'Default',h:''},{l:'Sky',h:'#3a9fd6'},{l:'Mint',h:'#27996a'},{l:'Coral',h:'#d96040'},{l:'Gold',h:'#c49010'},{l:'Lavender',h:'#6e5ec0'},{l:'Rose',h:'#c24470'},{l:'Lime',h:'#5ea020'}];
 
@@ -1234,10 +1238,18 @@ function buildEnt(e,total,st,savFn,renFn,editable){
     </div></div>`;
   } else {
     const secBtn=isNT&&editable?`<button class="ibtn" style="font-size:11px;color:var(--am);" onclick="toggleEntrySection('${e.uid}')" title="Move to ${e.section==='morning'?'Afternoon':'Morning'}">${e.section==='morning'?'\uD83C\uDF05->Aftn':'\u2600->Morn'}</button>`:'';
+    if(e.type==='photo'){
+      div.innerHTML=arrs+`<div class="edot" style="background:${dot}"></div><span class="etime">${timeStr}</span>
+      <div class="ebody"><div class="emain"><span class="elbl">\uD83D\uDCF7 Photo</span><div class="badges">${badges}</div>
+        <div class="eacts">${editable?`<button class="ibtn del" onclick="delByUid('${e.uid}',_activeSt,_activeSav,_activeRen)">x</button>`:''}</div>
+      </div>${(cliH||locH)?`<div class="matnotes">${cliH}${locH}</div>`:''}
+      ${buildPhotoEntryBody(e,editable)}</div>`;
+    } else {
     div.innerHTML=arrs+`<div class="edot" style="background:${dot}"></div><span class="etime${isNT?' needsT':''}">${timeStr}</span>
     <div class="ebody"><div class="emain"><span class="elbl">${lbl}</span><div class="badges">${badges}</div>
       <div class="eacts">${secBtn}${canEd?`<button class="ibtn" onclick="startEditByUid('${e.uid}')">Edit</button>`:''}${editable?`<button class="ibtn del" onclick="delByUid('${e.uid}',_activeSt,_activeSav,_activeRen)">x</button>`:''}</div>
-    </div>${(matH||cliH||locH)?`<div class="matnotes">${matH}${cliH}${locH}</div>`:''}${buildPhotoStrip(e.uid,todayKey(),editable)}</div>`;
+    </div>${(matH||cliH||locH)?`<div class="matnotes">${matH}${cliH}${locH}</div>`:''}</div>`;
+    }
   }
   return div;
 }
@@ -1628,36 +1640,61 @@ function doPrint(k){buildPrintSheet(k);setTimeout(()=>window.print(),250);}
 
 // == View toggle ==
 // == PHOTO / VIDEO CAPTURE SYSTEM ==
-// Photos stored as base64 dataURLs in localStorage per day.
-// Groups: photos taken within 5min of the FIRST photo in a group (per entry) are grouped together.
-// Storage key: ts_photos_YYYY-MM-DD  \u2192  {entryUid: [{gid, startTime, files:[{fid,dataUrl,type,ts}]}]}
+// Photos are their own entry type ('photo') in S.entries.
+// Files stored as base64 in ts_photos_YYYY-MM-DD keyed by entry uid.
+// Grouping: photos taken within 5 min of the FIRST photo's time (per photo-entry) are grouped.
 
-var _phViewerState={entUid:null,gid:null,fid:null,st:null,savFn:null,renFn:null};
-var GROUP_WINDOW_MS=5*60*1000; // 5 minutes
+var _phViewerState={entUid:null,gid:null,fid:null,dayKey:null};
+var GROUP_WINDOW_MS=5*60*1000;
 
 function loadPhotos(dayKey){
   try{var d=_lsGet('ts_photos_'+dayKey);return d?JSON.parse(d):{};}catch(e){return{};}
 }
 function savePhotos(dayKey,photos){
   try{_lsSet('ts_photos_'+dayKey,JSON.stringify(photos));}
-  catch(e){
-    if(e.name==='QuotaExceededError')alert('Storage full -- older photos may need to be cleared.');
-  }
-}
-function getPhotosForEntry(dayKey,entUid){
-  var all=loadPhotos(dayKey);
-  return all[entUid]||[];
+  catch(e){if(e.name==='QuotaExceededError')alert('Storage full - older photos may need to be cleared.');}
 }
 
-// Called when user picks a file for a given entry
-function handlePhotoCapture(entUid,fileInput,dayKey,renFn){
+// Called from the camera button (not tied to a specific entry)
+// Creates a new 'photo' entry in S.entries, then attaches files to it
+function openPhotoCaptureFromBtn(fileInput){
   var files=fileInput.files;
   if(!files||!files.length)return;
+  // Create a new photo entry
+  var t=new Date();
+  var entUid=uid();
+  var photoEntry={
+    uid:entUid,
+    type:'photo',
+    tag:'Photo',
+    note:'',
+    time:t,
+    manual:false,
+    needsTime:false,
+    section:isMorn(t)?'morning':'afternoon',
+    materials:[],
+    client:null,
+    location:null
+  };
+  S.entries.push(photoEntry);
+  // Attach GPS location
+  geoTagEntry(entUid,S.entries,save);
+  // Save files to photo store
+  attachFilesToEntry(entUid,todayKey(),files,function(){
+    save();
+    renderAll();
+  });
+  // Reset input
+  fileInput.value='';
+}
+
+// Attach files to an existing entry's photo store
+function attachFilesToEntry(entUid,dayKey,files,doneCb){
   var now=Date.now();
   var all=loadPhotos(dayKey);
   if(!all[entUid])all[entUid]=[];
   var groups=all[entUid];
-  // Find group to attach to: last group whose startTime is within 5min of now
+  // Find group: last group whose startTime is within 5 min of NOW
   var targetGroup=null;
   for(var i=groups.length-1;i>=0;i--){
     if(now-groups[i].startTime<=GROUP_WINDOW_MS){targetGroup=groups[i];break;}
@@ -1672,55 +1709,71 @@ function handlePhotoCapture(entUid,fileInput,dayKey,renFn){
       var reader=new FileReader();
       reader.onload=function(ev){
         targetGroup.files.push({
-          fid:'f'+Date.now()+Math.random().toString(36).slice(2,6),
+          fid:'f'+Date.now()+Math.floor(Math.random()*9999),
           dataUrl:ev.target.result,
           type:file.type,
-          name:file.name,
+          name:file.name||'photo',
           ts:Date.now()
         });
         remaining--;
-        if(remaining===0){savePhotos(dayKey,all);if(renFn)renFn();}
+        if(remaining===0){
+          savePhotos(dayKey,all);
+          if(doneCb)doneCb();
+        }
+      };
+      reader.onerror=function(){
+        remaining--;
+        if(remaining===0){savePhotos(dayKey,all);if(doneCb)doneCb();}
       };
       reader.readAsDataURL(file);
     })(files[fi]);
   }
 }
 
-// Render photo strip for an entry (returns HTML string)
-function buildPhotoStrip(entUid,dayKey,editable){
-  var groups=getPhotosForEntry(dayKey,entUid);
-  if(!groups.length&&!editable)return'';
+// Build the photo entry display (used in buildEnt for type==='photo')
+function buildPhotoEntryBody(e,editable){
+  var dayKey=todayKey();
+  var groups=loadPhotos(dayKey)[e.uid]||[];
   var html='<div class="photo-strip">';
   groups.forEach(function(g){
     if(!g.files.length)return;
-    // Group label: time range
     var start=new Date(g.startTime);
     var end=new Date(g.files[g.files.length-1].ts);
-    var lbl=fmtT(start)+(g.files.length>1?' \u2013 '+fmtT(end):'');
-    var countLbl=g.files.length>1?(g.files.length+' items \u2022 '):'';
-    html+='<div class="photo-group-lbl">'+countLbl+lbl+'</div>';
+    var lbl=fmtT(start)+(g.files.length>1?(' \u2013 '+fmtT(end)):'');
+    var countTxt=g.files.length>1?(g.files.length+' items \u2022 '):'';
+    html+='<div class="photo-group-lbl">'+countTxt+lbl+'</div>';
     g.files.forEach(function(f){
       var isVid=f.type&&f.type.indexOf('video')===0;
-      html+='<div class="photo-thumb" onclick="openPhViewer(\''+entUid+'\',\''+g.gid+'\',\''+f.fid+'\',\''+dayKey+'\')">'
+      html+='<div class="photo-thumb" onclick="openPhViewer(\''+e.uid+'\',\''+g.gid+'\',\''+f.fid+'\',\''+dayKey+'\')">'
         +(isVid
-          ?'<video src="'+f.dataUrl+'" style="width:100%;height:100%;object-fit:cover;" muted playsinline></video><span class="ph-vid-badge">&#9654; vid</span>'
+          ?'<video src="'+f.dataUrl+'" style="width:100%;height:100%;object-fit:cover;" muted playsinline></video><span class="ph-vid-badge">&#9654;</span>'
           :'<img src="'+f.dataUrl+'" alt="photo">')
         +'</div>';
     });
   });
-  // Add button
   if(editable){
-    html+='<label class="photo-add-btn" title="Add photo/video">'
+    html+='<label class="photo-add-btn" title="Add more photos">'
       +'&#128247;'
       +'<input type="file" accept="image/*,video/*" capture="environment" multiple style="display:none;" '
-      +'onchange="handlePhotoCapture(\''+entUid+'\',this,\''+dayKey+'\',_activeRen)">'
+      +'onchange="addMorePhotos(\''+e.uid+'\',this)">'
       +'</label>';
   }
   html+='</div>';
   return html;
 }
 
-// Open full-screen viewer
+// Add more photos to an existing photo entry
+function addMorePhotos(entUid,fileInput){
+  var files=fileInput.files;
+  if(!files||!files.length)return;
+  attachFilesToEntry(entUid,todayKey(),files,function(){
+    save();
+    renderAll();
+  });
+  fileInput.value='';
+}
+
+// Open full-screen viewer with metadata
 function openPhViewer(entUid,gid,fid,dayKey){
   var all=loadPhotos(dayKey);
   var groups=(all[entUid]||[]);
@@ -1729,19 +1782,27 @@ function openPhViewer(entUid,gid,fid,dayKey){
   var f=g.files.find(function(x){return x.fid===fid;});
   if(!f)return;
   _phViewerState={entUid:entUid,gid:gid,fid:fid,dayKey:dayKey};
+  // Build metadata from the entry
+  var entry=(S.entries||[]).find(function(x){return x.uid===entUid;});
+  var metaLines=[];
+  metaLines.push(empName||'Unknown');
+  if(entry){
+    metaLines.push(fmtT(new Date(entry.time)));
+    if(entry.client&&entry.client.name)metaLines.push(entry.client.name+(entry.client.project?' \u2013 '+entry.client.project:''));
+    if(entry.location&&entry.location.address)metaLines.push(entry.location.address);
+  }
+  metaLines.push(fmtT(new Date(f.ts))+' \u2022 '+(g.files.indexOf(f)+1)+' of '+g.files.length);
   var content=document.getElementById('phViewerContent');
   var isVid=f.type&&f.type.indexOf('video')===0;
   content.innerHTML=isVid
-    ?'<video src="'+f.dataUrl+'" controls autoplay style="max-width:100%;max-height:80vh;border-radius:6px;"></video>'
-    :'<img src="'+f.dataUrl+'" style="max-width:100%;max-height:80vh;border-radius:6px;">';
-  var idx=g.files.indexOf(f)+1;
-  document.getElementById('phViewerInfo').textContent=fmtT(new Date(f.ts))+' \u2022 '+idx+' of '+g.files.length;
+    ?'<video src="'+f.dataUrl+'" controls autoplay style="max-width:100%;max-height:72vh;border-radius:6px;"></video>'
+    :'<img src="'+f.dataUrl+'" style="max-width:100%;max-height:72vh;border-radius:6px;">';
+  document.getElementById('phViewerInfo').innerHTML=metaLines.map(function(l){return'<div>'+l+'</div>';}).join('');
   document.getElementById('phViewer').style.display='flex';
 }
 function closePhViewer(){
   document.getElementById('phViewer').style.display='none';
   var content=document.getElementById('phViewerContent');
-  // Stop video if playing
   var vid=content.querySelector('video');
   if(vid){vid.pause();vid.src='';}
   content.innerHTML='';
@@ -1755,14 +1816,17 @@ function deleteCurrentPhoto(){
   var g=groups.find(function(x){return x.gid===s.gid;});
   if(!g)return;
   g.files=g.files.filter(function(x){return x.fid!==s.fid;});
-  // Remove empty groups
   all[s.entUid]=groups.filter(function(x){return x.files.length>0;});
   savePhotos(s.dayKey,all);
   closePhViewer();
-  // Re-render -- use active render function
-  if(typeof _activeRen==='function')_activeRen();
+  // If the photo entry now has no photos, remove the entry too
+  var remaining=(all[s.entUid]||[]).reduce(function(n,g){return n+g.files.length;},0);
+  if(remaining===0){
+    S.entries=S.entries.filter(function(x){return x.uid!==s.entUid;});
+    save();
+  }
+  renderAll();
 }
-
 let currentView='full';
 function setView(v){
   currentView=v;
@@ -2534,7 +2598,7 @@ function initCatSelects(){
 if(empName){
   S=loadDay(todayKey());
   showPage('pgApp');
-  const savedView=_lsGet('ts_view')||'full';
+  const savedView=_lsGet('ts_view')||'simple';
   currentView=savedView;
   if(savedView==='simple'){
     document.getElementById('vtFull').className='vt-btn';
