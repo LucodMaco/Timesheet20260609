@@ -1816,27 +1816,17 @@ function renderLocView(){
 var GDRIVE_CLIENT_ID='795798239190-3jqcq15fi3oeqc77fk0bp6ic2qd6o112.apps.googleusercontent.com';
 var GDRIVE_SCOPE='https://www.googleapis.com/auth/drive.file';
 var GDRIVE_FOLDER_NAME='Timesheet';
-var GDRIVE_REDIRECT_URI='https://lucodmaco.github.io/Timesheet20260609';
+var GDRIVE_REDIRECT_URI='https://lucodmaco.github.io/Timesheet20260609/oauth.html';
 var _gdriveToken=null;
 var _gdriveTokenExpiry=0;
 var _gdriveFolderCache={};
 var _gdriveRootFolderId=null;
 
-// Handle token arriving in URL hash after OAuth redirect (runs immediately on load)
+// Token is written by oauth.html callback page, read here on load
 (function(){
-  var hash=window.location.hash;
-  if(hash&&hash.indexOf('access_token=')>=0){
-    var params={};
-    hash.slice(1).split('&').forEach(function(p){var kv=p.split('=');params[kv[0]]=decodeURIComponent(kv[1]||'');});
-    if(params.access_token){
-      _gdriveToken=params.access_token;
-      var exp=parseInt(params.expires_in||3600);
-      _gdriveTokenExpiry=Date.now()+(exp-60)*1000;
-      _lsSet('ts_gdrive_token',_gdriveToken);
-      _lsSet('ts_gdrive_expiry',String(_gdriveTokenExpiry));
-      history.replaceState(null,'',window.location.pathname);
-    }
-  }
+  var t=_lsGet('ts_gdrive_token');
+  var e=parseInt(_lsGet('ts_gdrive_expiry')||'0');
+  if(t&&Date.now()<e){_gdriveToken=t;_gdriveTokenExpiry=e;}
 })();
 
 // \u2500\u2500 Auth \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -1867,9 +1857,11 @@ function gdriveDisconnect(){
 }
 
 function gdriveLoadToken(){
-  var t=_lsGet('ts_gdrive_token');
-  var e=parseInt(_lsGet('ts_gdrive_expiry')||'0');
-  if(t&&Date.now()<e){_gdriveToken=t;_gdriveTokenExpiry=e;}
+  if(!_gdriveToken){
+    var t=_lsGet('ts_gdrive_token');
+    var e=parseInt(_lsGet('ts_gdrive_expiry')||'0');
+    if(t&&Date.now()<e){_gdriveToken=t;_gdriveTokenExpiry=e;}
+  }
 }
 
 // \u2500\u2500 Drive API helpers \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500

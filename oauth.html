@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Connecting...</title>
+<style>
+body{font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f4f3ef;color:#1a1916;text-align:center;padding:20px;}
+.card{background:#fff;border-radius:16px;padding:32px 24px;box-shadow:0 4px 24px rgba(0,0,0,.1);max-width:320px;width:100%;}
+h2{margin:0 0 8px;font-size:20px;}
+p{margin:0 0 20px;color:#5c5a54;font-size:14px;}
+.ok{color:#2a6e4a;font-size:48px;margin-bottom:12px;}
+.err{color:#952020;font-size:48px;margin-bottom:12px;}
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <div style="font-size:48px;margin-bottom:12px;">⏳</div>
+  <h2>Connecting to Google Drive...</h2>
+  <p>Please wait</p>
+</div>
+<script>
+(function(){
+  var hash = window.location.hash;
+  var card = document.getElementById('card');
+
+  if(hash && hash.indexOf('access_token=') >= 0){
+    var params = {};
+    hash.slice(1).split('&').forEach(function(p){
+      var kv = p.split('=');
+      params[kv[0]] = decodeURIComponent(kv[1] || '');
+    });
+
+    if(params.access_token){
+      var exp = parseInt(params.expires_in || 3600);
+      var expiry = Date.now() + (exp - 60) * 1000;
+
+      // Save to localStorage -- same origin as the main app
+      try {
+        localStorage.setItem('ts_gdrive_token', params.access_token);
+        localStorage.setItem('ts_gdrive_expiry', String(expiry));
+      } catch(e) {
+        card.innerHTML = '<div class="err">⚠️</div><h2>Storage error</h2><p>Could not save token. Please try again.</p>';
+        return;
+      }
+
+      card.innerHTML = '<div class="ok">✓</div><h2>Google Drive connected!</h2><p>Returning to Timesheet...</p>';
+
+      // Return to the app after short delay
+      setTimeout(function(){
+        window.location.href = 'https://lucodmaco.github.io/Timesheet20260609';
+      }, 1200);
+
+    } else {
+      card.innerHTML = '<div class="err">✕</div><h2>Connection failed</h2><p>' + (params.error || 'Unknown error') + '</p><p><a href="https://lucodmaco.github.io/Timesheet20260609">Go back</a></p>';
+    }
+
+  } else {
+    // No hash -- probably navigated here directly
+    window.location.href = 'https://lucodmaco.github.io/Timesheet20260609';
+  }
+})();
+</script>
+</body>
+</html>
