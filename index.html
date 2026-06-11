@@ -1816,10 +1816,28 @@ function renderLocView(){
 var GDRIVE_CLIENT_ID='795798239190-3jqcq15fi3oeqc77fk0bp6ic2qd6o112.apps.googleusercontent.com';
 var GDRIVE_SCOPE='https://www.googleapis.com/auth/drive.file';
 var GDRIVE_FOLDER_NAME='Timesheet';
+var GDRIVE_REDIRECT_URI='https://lucodmaco.github.io/Timesheet20260609';
 var _gdriveToken=null;
 var _gdriveTokenExpiry=0;
-var _gdriveFolderCache={}; // dayKey -> folderId
+var _gdriveFolderCache={};
 var _gdriveRootFolderId=null;
+
+// Handle token arriving in URL hash after OAuth redirect (runs immediately on load)
+(function(){
+  var hash=window.location.hash;
+  if(hash&&hash.indexOf('access_token=')>=0){
+    var params={};
+    hash.slice(1).split('&').forEach(function(p){var kv=p.split('=');params[kv[0]]=decodeURIComponent(kv[1]||'');});
+    if(params.access_token){
+      _gdriveToken=params.access_token;
+      var exp=parseInt(params.expires_in||3600);
+      _gdriveTokenExpiry=Date.now()+(exp-60)*1000;
+      _lsSet('ts_gdrive_token',_gdriveToken);
+      _lsSet('ts_gdrive_expiry',String(_gdriveTokenExpiry));
+      history.replaceState(null,'',window.location.pathname);
+    }
+  }
+})();
 
 // \u2500\u2500 Auth \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function gdriveIsConnected(){
@@ -1827,38 +1845,19 @@ function gdriveIsConnected(){
 }
 
 function gdriveConnect(cb){
-  // Use OAuth implicit flow -- opens popup, gets token, no secret needed
-  var redirectUri=window.location.origin+window.location.pathname;
+  // Redirect flow -- navigates to Google, returns to this page with token in hash.
+  // Hardcoded redirect URI must exactly match what's in Google Cloud Console.
+  _lsSet('ts_gdrive_returnview','photo'); // remember to go back to photos view
   var url='https://accounts.google.com/o/oauth2/v2/auth'
     +'?client_id='+encodeURIComponent(GDRIVE_CLIENT_ID)
-    +'&redirect_uri='+encodeURIComponent(redirectUri)
+    +'&redirect_uri='+encodeURIComponent(GDRIVE_REDIRECT_URI)
     +'&response_type=token'
     +'&scope='+encodeURIComponent(GDRIVE_SCOPE)
     +'&prompt=consent';
-  // Open popup
-  var w=window.open(url,'gdrive_auth','width=500,height=600,left=100,top=100');
-  if(!w){alert('Please allow popups for this site to connect Google Drive.');return;}
-  // Poll for redirect back with token in hash
-  var poll=setInterval(function(){
-    try{
-      var hash=w.location.hash;
-      if(hash&&hash.indexOf('access_token=')>=0){
-        clearInterval(poll);
-        w.close();
-        var params={};
-        hash.slice(1).split('&').forEach(function(p){var kv=p.split('=');params[kv[0]]=decodeURIComponent(kv[1]);});
-        _gdriveToken=params['access_token'];
-        var expiresIn=parseInt(params['expires_in']||3600);
-        _gdriveTokenExpiry=Date.now()+(expiresIn-60)*1000;
-        _lsSet('ts_gdrive_token',_gdriveToken);
-        _lsSet('ts_gdrive_expiry',String(_gdriveTokenExpiry));
-        _gdriveRootFolderId=null;_gdriveFolderCache={};
-        if(cb)cb(true);
-        renderPhotoView();
-      }
-    } catch(e){/* cross-origin, keep polling */}
-    if(w.closed){clearInterval(poll);if(cb)cb(false);}
-  },500);
+  window.location.href=url;
+  // (page will reload with token in hash -- handled in the IIFE above)
+  // cb is not called in redirect flow
+  void cb;
 }
 
 function gdriveDisconnect(){
@@ -2803,7 +2802,10 @@ if(empName){
   S=loadDay(todayKey());
   showPage('pgApp');
   const savedView=_lsGet('ts_view')||'simple';
-  setView(savedView);
+  gdriveLoadToken();
+  var returnView=_lsGet('ts_gdrive_returnview');
+  if(returnView){_lsSet('ts_gdrive_returnview','');setView(returnView);}
+  else{setView(savedView);}
 }
 else showPage('pgWelcome');
 
