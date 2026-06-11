@@ -1874,28 +1874,26 @@ function gdriveLoadToken(){
 
 // \u2500\u2500 Drive API helpers \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function driveAPI(method,path,body,contentType,cb){
-  var xhr=new XMLHttpRequest();
-  xhr.open(method,'https://www.googleapis.com'+path,true);
-  xhr.setRequestHeader('Authorization','Bearer '+_gdriveToken);
-  if(contentType)xhr.setRequestHeader('Content-Type',contentType);
-  xhr.onload=function(){
-    if(xhr.status===401){_gdriveToken=null;_gdriveTokenExpiry=0;if(cb)cb(null,'auth');return;}
-    try{cb(JSON.parse(xhr.responseText),null);}catch(e){cb(null,'parse');}
-  };
-  xhr.onerror=function(){if(cb)cb(null,'network');};
-  xhr.send(body||null);
+  var headers={'Authorization':'Bearer '+_gdriveToken};
+  if(contentType)headers['Content-Type']=contentType;
+  fetch('https://www.googleapis.com'+path,{method:method,headers:headers,body:body||undefined})
+    .then(function(r){
+      if(r.status===401){_gdriveToken=null;_gdriveTokenExpiry=0;cb(null,'auth');return;}
+      if(!r.ok){r.text().then(function(t){console.error('Drive API error',r.status,t);cb(null,'http'+r.status);});}
+      else return r.json().then(function(d){cb(d,null);});
+    })
+    .catch(function(e){console.error('Drive fetch error',e);cb(null,'network');});
 }
 
 function driveGetOrCreateFolder(name,parentId,cb){
-  // Search for existing folder
   var q="mimeType='application/vnd.google-apps.folder' and name='"+name+"' and trashed=false"+(parentId?" and '"+parentId+"' in parents":'');
-  driveAPI('GET','/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name)',null,null,function(data,err){
-    if(err||!data){cb(null);return;}
+  driveAPI('GET','/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name)&spaces=drive',null,null,function(data,err){
+    if(err||!data){console.error('folder search failed',err);cb(null);return;}
     if(data.files&&data.files.length>0){cb(data.files[0].id);return;}
-    // Create it
     var meta={name:name,mimeType:'application/vnd.google-apps.folder'};
     if(parentId)meta.parents=[parentId];
     driveAPI('POST','/drive/v3/files',JSON.stringify(meta),'application/json',function(d2,e2){
+      if(e2){console.error('folder create failed',e2);}
       cb(d2?d2.id:null);
     });
   });
@@ -1903,7 +1901,6 @@ function driveGetOrCreateFolder(name,parentId,cb){
 
 function driveEnsureDayFolder(dayKey,cb){
   if(_gdriveFolderCache[dayKey]){cb(_gdriveFolderCache[dayKey]);return;}
-  // Ensure root Timesheet folder
   if(_gdriveRootFolderId){
     driveGetOrCreateFolder(dayKey,_gdriveRootFolderId,function(id){
       if(id)_gdriveFolderCache[dayKey]=id;
@@ -1912,7 +1909,7 @@ function driveEnsureDayFolder(dayKey,cb){
     return;
   }
   driveGetOrCreateFolder(GDRIVE_FOLDER_NAME,null,function(rootId){
-    if(!rootId){cb(null);return;}
+    if(!rootId){console.error('Could not find/create root Timesheet folder');cb(null);return;}
     _gdriveRootFolderId=rootId;
     driveGetOrCreateFolder(dayKey,rootId,function(dayId){
       if(dayId)_gdriveFolderCache[dayKey]=dayId;
@@ -1922,7 +1919,7 @@ function driveEnsureDayFolder(dayKey,cb){
 }
 
 function driveUploadPhoto(file,filename,folderId,cb){
-  // Multipart upload
+  // Use resumable/multipart upload via fetch with Blob
   var reader=new FileReader();
   reader.onload=function(ev){
     var b64=ev.target.result;
