@@ -164,6 +164,14 @@ textarea{resize:vertical;min-height:78px;}
 .photo-group-lbl{font-size:10px;color:var(--tx3);margin-bottom:2px;width:100%;}
 .photo-add-btn{width:54px;height:54px;border-radius:6px;border:1.5px dashed var(--bd2);background:var(--sf2);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;color:var(--tx3);font-size:20px;}
 .photo-add-btn:hover{border-color:var(--tl);color:var(--tl);}
+/* Google Drive integration */
+.drive-connect-bar{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.drive-status{font-size:13px;color:var(--tx2);}
+.drive-status.connected{color:#1b5e20;font-weight:500;}
+.drive-folder-link{font-size:12px;color:var(--bl);text-decoration:none;}
+.drive-folder-link:hover{text-decoration:underline;}
+.ph-count-badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 9px;border-radius:6px;background:#e8f0fe;color:#1a4f7a;border:1px solid #b8d4f0;cursor:pointer;text-decoration:none;}
+.ph-count-badge:hover{background:#d0e4ff;}
 /* Photo viewer modal */
 .ph-viewer{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;}
 .ph-viewer img,.ph-viewer video{max-width:100%;max-height:80vh;border-radius:6px;}
@@ -1798,121 +1806,187 @@ function renderLocView(){
   });
 }
 
-// == PHOTO / VIDEO CAPTURE SYSTEM ==
-// Uses IndexedDB for photo storage -- handles large files, no 5MB limit.
-// DB: 'ts_photos', store: 'files', key: dayKey+'_'+entUid
+// == PHOTO / VIDEO CAPTURE SYSTEM + GOOGLE DRIVE UPLOAD ==
+// Photos upload directly to owner's Google Drive.
+// Folder: Timesheet/YYYY-MM-DD/
+// Filename: HHMM_EmployeeName_Client_note.jpg
+// Log entry stores Drive folder URL -- tapping opens folder in browser.
+// OAuth uses implicit flow (token only, no secret in app).
 
-var _phDB=null;
-var _phViewerState={entUid:null,gid:null,fid:null,dayKey:null};
-var GROUP_WINDOW_MS=5*60*1000;
+var GDRIVE_CLIENT_ID='795798239190-3jqcq15fi3oeqc77fk0bp6ic2qd6o112.apps.googleusercontent.com';
+var GDRIVE_SCOPE='https://www.googleapis.com/auth/drive.file';
+var GDRIVE_FOLDER_NAME='Timesheet';
+var _gdriveToken=null;
+var _gdriveTokenExpiry=0;
+var _gdriveFolderCache={}; // dayKey -> folderId
+var _gdriveRootFolderId=null;
 
-function openPhDB(cb){
-  if(_phDB){cb(_phDB);return;}
-  var req=indexedDB.open('ts_photos',1);
-  req.onupgradeneeded=function(e){
-    var db=e.target.result;
-    if(!db.objectStoreNames.contains('files'))db.createObjectStore('files');
-  };
-  req.onsuccess=function(e){_phDB=e.target.result;cb(_phDB);};
-  req.onerror=function(){cb(null);};
+// \u2500\u2500 Auth \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function gdriveIsConnected(){
+  return _gdriveToken&&Date.now()<_gdriveTokenExpiry;
 }
 
-function loadPhotos(dayKey,cb){
-  openPhDB(function(db){
-    if(!db){cb({});return;}
-    var tx=db.transaction('files','readonly');
-    var store=tx.objectStore('files');
-    var result={};
-    // Get all keys for this day
-    var req=store.openCursor();
-    req.onsuccess=function(e){
-      var cursor=e.target.result;
-      if(cursor){
-        var key=cursor.key;
-        if(key.indexOf(dayKey+'_')===0){
-          var entUid=key.slice(dayKey.length+1);
-          result[entUid]=cursor.value;
-        }
-        cursor.continue();
-      } else {
-        cb(result);
+function gdriveConnect(cb){
+  // Use OAuth implicit flow -- opens popup, gets token, no secret needed
+  var redirectUri=window.location.origin+window.location.pathname;
+  var url='https://accounts.google.com/o/oauth2/v2/auth'
+    +'?client_id='+encodeURIComponent(GDRIVE_CLIENT_ID)
+    +'&redirect_uri='+encodeURIComponent(redirectUri)
+    +'&response_type=token'
+    +'&scope='+encodeURIComponent(GDRIVE_SCOPE)
+    +'&prompt=consent';
+  // Open popup
+  var w=window.open(url,'gdrive_auth','width=500,height=600,left=100,top=100');
+  if(!w){alert('Please allow popups for this site to connect Google Drive.');return;}
+  // Poll for redirect back with token in hash
+  var poll=setInterval(function(){
+    try{
+      var hash=w.location.hash;
+      if(hash&&hash.indexOf('access_token=')>=0){
+        clearInterval(poll);
+        w.close();
+        var params={};
+        hash.slice(1).split('&').forEach(function(p){var kv=p.split('=');params[kv[0]]=decodeURIComponent(kv[1]);});
+        _gdriveToken=params['access_token'];
+        var expiresIn=parseInt(params['expires_in']||3600);
+        _gdriveTokenExpiry=Date.now()+(expiresIn-60)*1000;
+        _lsSet('ts_gdrive_token',_gdriveToken);
+        _lsSet('ts_gdrive_expiry',String(_gdriveTokenExpiry));
+        _gdriveRootFolderId=null;_gdriveFolderCache={};
+        if(cb)cb(true);
+        renderPhotoView();
       }
-    };
-    req.onerror=function(){cb({});};
+    } catch(e){/* cross-origin, keep polling */}
+    if(w.closed){clearInterval(poll);if(cb)cb(false);}
+  },500);
+}
+
+function gdriveDisconnect(){
+  _gdriveToken=null;_gdriveTokenExpiry=0;_gdriveRootFolderId=null;_gdriveFolderCache={};
+  _lsSet('ts_gdrive_token','');_lsSet('ts_gdrive_expiry','0');
+  renderPhotoView();
+}
+
+function gdriveLoadToken(){
+  var t=_lsGet('ts_gdrive_token');
+  var e=parseInt(_lsGet('ts_gdrive_expiry')||'0');
+  if(t&&Date.now()<e){_gdriveToken=t;_gdriveTokenExpiry=e;}
+}
+
+// \u2500\u2500 Drive API helpers \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function driveAPI(method,path,body,contentType,cb){
+  var xhr=new XMLHttpRequest();
+  xhr.open(method,'https://www.googleapis.com'+path,true);
+  xhr.setRequestHeader('Authorization','Bearer '+_gdriveToken);
+  if(contentType)xhr.setRequestHeader('Content-Type',contentType);
+  xhr.onload=function(){
+    if(xhr.status===401){_gdriveToken=null;_gdriveTokenExpiry=0;if(cb)cb(null,'auth');return;}
+    try{cb(JSON.parse(xhr.responseText),null);}catch(e){cb(null,'parse');}
+  };
+  xhr.onerror=function(){if(cb)cb(null,'network');};
+  xhr.send(body||null);
+}
+
+function driveGetOrCreateFolder(name,parentId,cb){
+  // Search for existing folder
+  var q="mimeType='application/vnd.google-apps.folder' and name='"+name+"' and trashed=false"+(parentId?" and '"+parentId+"' in parents":'');
+  driveAPI('GET','/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name)',null,null,function(data,err){
+    if(err||!data){cb(null);return;}
+    if(data.files&&data.files.length>0){cb(data.files[0].id);return;}
+    // Create it
+    var meta={name:name,mimeType:'application/vnd.google-apps.folder'};
+    if(parentId)meta.parents=[parentId];
+    driveAPI('POST','/drive/v3/files',JSON.stringify(meta),'application/json',function(d2,e2){
+      cb(d2?d2.id:null);
+    });
   });
 }
 
-function loadPhotosForEntry(dayKey,entUid,cb){
-  openPhDB(function(db){
-    if(!db){cb([]);return;}
-    var tx=db.transaction('files','readonly');
-    var store=tx.objectStore('files');
-    var req=store.get(dayKey+'_'+entUid);
-    req.onsuccess=function(e){cb(e.target.result||[]);};
-    req.onerror=function(){cb([]);};
+function driveEnsureDayFolder(dayKey,cb){
+  if(_gdriveFolderCache[dayKey]){cb(_gdriveFolderCache[dayKey]);return;}
+  // Ensure root Timesheet folder
+  if(_gdriveRootFolderId){
+    driveGetOrCreateFolder(dayKey,_gdriveRootFolderId,function(id){
+      if(id)_gdriveFolderCache[dayKey]=id;
+      cb(id);
+    });
+    return;
+  }
+  driveGetOrCreateFolder(GDRIVE_FOLDER_NAME,null,function(rootId){
+    if(!rootId){cb(null);return;}
+    _gdriveRootFolderId=rootId;
+    driveGetOrCreateFolder(dayKey,rootId,function(dayId){
+      if(dayId)_gdriveFolderCache[dayKey]=dayId;
+      cb(dayId);
+    });
   });
 }
 
-function savePhotosForEntry(dayKey,entUid,groups,cb){
-  openPhDB(function(db){
-    if(!db){if(cb)cb();return;}
-    var tx=db.transaction('files','readwrite');
-    var store=tx.objectStore('files');
-    var req=store.put(groups,dayKey+'_'+entUid);
-    req.onsuccess=function(){if(cb)cb();};
-    req.onerror=function(){if(cb)cb();};
-  });
+function driveUploadPhoto(file,filename,folderId,cb){
+  // Multipart upload
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    var b64=ev.target.result;
+    var mime=file.type||'image/jpeg';
+    var meta={name:filename,parents:[folderId]};
+    var boundary='ts_boundary_'+Date.now();
+    var body='--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'
+      +JSON.stringify(meta)+'\r\n'
+      +'--'+boundary+'\r\nContent-Type: '+mime+'\r\nContent-Transfer-Encoding: base64\r\n\r\n'
+      +b64.split(',')[1]+'\r\n'
+      +'--'+boundary+'--';
+    driveAPI('POST','/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,parents',
+      body,'multipart/related; boundary='+boundary,function(d,e){cb(d,e);});
+  };
+  reader.readAsDataURL(file);
 }
 
-function deletePhotosForEntry(dayKey,entUid,cb){
-  openPhDB(function(db){
-    if(!db){if(cb)cb();return;}
-    var tx=db.transaction('files','readwrite');
-    var store=tx.objectStore('files');
-    store.delete(dayKey+'_'+entUid);
-    tx.oncomplete=function(){if(cb)cb();};
-  });
+function driveBuildFilename(file,note,clientName,idx){
+  var now=new Date();
+  var hhmm=(now.getHours()<10?'0':'')+now.getHours()+(now.getMinutes()<10?'0':'')+now.getMinutes();
+  var name=empName||'Unknown';
+  var parts=[hhmm,name.replace(/\s+/g,'')];
+  if(clientName)parts.push(clientName.replace(/\s+/g,''));
+  if(note)parts.push(note.replace(/[^a-zA-Z0-9]/g,'').slice(0,20));
+  if(idx>0)parts.push(String(idx+1));
+  var ext=(file.name||'photo.jpg').split('.').pop().split('?')[0]||'jpg';
+  return parts.join('_')+'.'+ext;
 }
 
-// State for photo metadata modal
+function driveFolderUrl(dayKey){
+  var id=_gdriveFolderCache[dayKey];
+  return id?'https://drive.google.com/drive/folders/'+id:'https://drive.google.com/drive/my-drive';
+}
+
+// \u2500\u2500 Photo capture flow \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 var _pmFiles=null;
 
 function openPhotoCaptureFromBtn(fileInput){
   var files=fileInput.files;
   if(!files||!files.length){fileInput.value='';return;}
   _pmFiles=Array.from(files);
-  // Populate category select
+  if(!gdriveIsConnected()){
+    if(confirm('Connect Google Drive to upload photos. Connect now?')){
+      gdriveConnect(function(ok){if(ok)openPhotoCaptureFromBtn({files:_pmFiles,value:''});});
+    }
+    fileInput.value='';return;
+  }
+  // Populate modal
   var sel=document.getElementById('pmCat');
-  if(sel){
-    sel.innerHTML='<option value="">-- pick --</option>';
-    (CATS||[]).forEach(function(c){var o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o);});
-  }
-  // Populate client preset buttons
+  if(sel){sel.innerHTML='<option value="">-- pick --</option>';(CATS||[]).forEach(function(c){var o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o);});}
   var cb=document.getElementById('pmClientBtns');
-  if(cb){
-    cb.innerHTML='';
-    (CLIENT_PRESETS||[]).forEach(function(p){
-      var b=document.createElement('button');b.className='btn sm';b.type='button';b.textContent=p;
-      b.style.cssText='font-size:11px;padding:3px 9px;';
-      b.onclick=function(){document.getElementById('pmClientName').value=p;document.getElementById('pmClientProject').value='';};
-      cb.appendChild(b);
-    });
-  }
-  // Show file previews
+  if(cb){cb.innerHTML='';(CLIENT_PRESETS||[]).forEach(function(p){var b=document.createElement('button');b.className='btn sm';b.type='button';b.textContent=p;b.style.cssText='font-size:11px;padding:3px 9px;';b.onclick=function(){document.getElementById('pmClientName').value=p;document.getElementById('pmClientProject').value='';};cb.appendChild(b);});}
   var prev=document.getElementById('pmPreview');
   if(prev){
-    prev.innerHTML='<div style="font-size:11px;color:var(--tx3);width:100%;margin-bottom:4px;">'+_pmFiles.length+' file'+ (_pmFiles.length>1?'s':'') +' selected</div>';
-    for(var i=0;i<Math.min(_pmFiles.length,6);i++){
+    prev.innerHTML='<div style="font-size:11px;color:var(--tx3);margin-bottom:4px;">'+_pmFiles.length+' file'+(_pmFiles.length>1?'s':'')+' selected \u2014 will upload to Google Drive</div>';
+    for(var i=0;i<Math.min(_pmFiles.length,4);i++){
       (function(f){
-        var reader=new FileReader();
-        reader.onload=function(ev){
-          var el=document.createElement(f.type&&f.type.indexOf('video')===0?'video':'img');
-          el.src=ev.target.result;
-          el.style.cssText='width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid var(--bd);';
-          if(el.tagName==='VIDEO'){el.muted=true;}
-          prev.appendChild(el);
-        };
-        reader.readAsDataURL(f);
+        var url=URL.createObjectURL(f);
+        var el=document.createElement(f.type&&f.type.indexOf('video')===0?'video':'img');
+        el.src=url;
+        el.style.cssText='width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid var(--bd);';
+        if(el.tagName==='VIDEO'){el.muted=true;}
+        prev.appendChild(el);
       })(_pmFiles[i]);
     }
   }
@@ -1927,7 +2001,11 @@ function openPhotoCaptureFromBtn(fileInput){
 function closePhotoMetaModal(){
   var modal=document.getElementById('photoMetaModal');
   if(modal)modal.classList.remove('open');
-  _pmFiles=null;
+  var saveBtn=document.querySelector('#photoMetaModal .btn.pr.sm');
+  if(saveBtn)saveBtn.setAttribute('onclick','savePhotoWithMeta()');
+  var h3=document.querySelector('#photoMetaModal h3');
+  if(h3)h3.textContent='\uD83D\uDCF7 Add photo';
+  _pmFiles=null;_peEditUid=null;_peDayKey=null;
 }
 
 function savePhotoWithMeta(){
@@ -1938,71 +2016,41 @@ function savePhotoWithMeta(){
   var clientProject=(document.getElementById('pmClientProject').value||'').trim();
   var t=new Date();
   var dayKey=todayKey();
-  var now=Date.now();
-  // Look for a recent photo entry within GROUP_WINDOW_MS
-  var existingEnt=null;
-  for(var i=S.entries.length-1;i>=0;i--){
-    var e2=S.entries[i];
-    if(e2.type==='photo'&&(now-new Date(e2.time).getTime())<=GROUP_WINDOW_MS){existingEnt=e2;break;}
-  }
-  var entUid;
-  if(existingEnt){
-    entUid=existingEnt.uid;
-    if(note&&!existingEnt.note)existingEnt.note=note;
-    if(cat&&(!existingEnt.tag||existingEnt.tag==='Photo'))existingEnt.tag=cat;
-    if(clientName&&!existingEnt.client)existingEnt.client={name:clientName,project:clientProject,hours:0,hoursManual:false};
-  } else {
-    entUid=uid();
-    var photoEntry={uid:entUid,type:'photo',tag:cat||'Photo',note:note,time:t,manual:false,
-      needsTime:false,section:isMorn(t)?'morning':'afternoon',materials:[],
-      client:clientName?{name:clientName,project:clientProject,hours:0,hoursManual:false}:null,location:null};
-    S.entries.push(photoEntry);
-    geoTagEntry(entUid,S.entries,save);
-  }
+  // Create entry immediately (folder URL stored after upload completes)
+  var entUid=uid();
+  var photoEntry={uid:entUid,type:'photo',tag:cat||'Photo',note:note,time:t,manual:false,
+    needsTime:false,section:isMorn(t)?'morning':'afternoon',materials:[],
+    client:clientName?{name:clientName,project:clientProject,hours:0,hoursManual:false}:null,
+    location:null,driveFolder:null,driveCount:0};
+  S.entries.push(photoEntry);
+  geoTagEntry(entUid,S.entries,save);
   save();
   closePhotoMetaModal();
-  var filesToSave=_pmFiles;
-  _pmFiles=null;
-  attachFilesToEntry(entUid,dayKey,filesToSave,function(){
-    save();
+  var files=_pmFiles; _pmFiles=null;
+  renderPhotoView();
+  // Upload to Drive
+  uploadFilesToDrive(entUid,dayKey,files,note,clientName,function(folderId,count){
+    var e=S.entries.find(function(x){return x.uid===entUid;});
+    if(e){e.driveFolder=folderId;e.driveCount=(e.driveCount||0)+count;save();}
     renderPhotoView();
   });
 }
 
-// Attach files to entry using IndexedDB
-function attachFilesToEntry(entUid,dayKey,files,doneCb){
-  var now=Date.now();
-  var arr=Array.from(files);
-  if(!arr.length){if(doneCb)doneCb();return;}
-  loadPhotosForEntry(dayKey,entUid,function(groups){
-    if(!groups||!Array.isArray(groups))groups=[];
-    // Find or create group within GROUP_WINDOW_MS
-    var targetGroup=null;
-    for(var i=groups.length-1;i>=0;i--){
-      if(now-groups[i].startTime<=GROUP_WINDOW_MS){targetGroup=groups[i];break;}
-    }
-    if(!targetGroup){targetGroup={gid:'g'+now,startTime:now,files:[]};groups.push(targetGroup);}
-    var remaining=arr.length;
-    arr.forEach(function(file){
-      var reader=new FileReader();
-      reader.onload=function(ev){
-        targetGroup.files.push({
-          fid:'f'+Date.now()+Math.floor(Math.random()*99999),
-          dataUrl:ev.target.result,
-          type:file.type,
-          name:file.name||'photo',
-          ts:Date.now()
-        });
-        remaining--;
-        if(remaining===0){
-          savePhotosForEntry(dayKey,entUid,groups,doneCb);
+function uploadFilesToDrive(entUid,dayKey,files,note,clientName,doneCb){
+  driveEnsureDayFolder(dayKey,function(folderId){
+    if(!folderId){alert('Could not access Google Drive folder. Check your connection.');if(doneCb)doneCb(null,0);return;}
+    var arr=Array.from(files);
+    var uploaded=0;
+    var failed=0;
+    arr.forEach(function(file,idx){
+      var fname=driveBuildFilename(file,note,clientName,idx);
+      driveUploadPhoto(file,fname,folderId,function(d,err){
+        if(d)uploaded++;else failed++;
+        if(uploaded+failed===arr.length){
+          if(failed>0)alert(failed+' photo(s) failed to upload. Check your Drive connection.');
+          if(doneCb)doneCb(folderId,uploaded);
         }
-      };
-      reader.onerror=function(){
-        remaining--;
-        if(remaining===0)savePhotosForEntry(dayKey,entUid,groups,doneCb);
-      };
-      reader.readAsDataURL(file);
+      });
     });
   });
 }
@@ -2010,150 +2058,90 @@ function attachFilesToEntry(entUid,dayKey,files,doneCb){
 function addMorePhotos(entUid,fileInput){
   var files=fileInput.files;
   if(!files||!files.length){fileInput.value='';return;}
-  attachFilesToEntry(entUid,todayKey(),files,function(){save();renderPhotoView();});
+  if(!gdriveIsConnected()){alert('Connect Google Drive first to upload photos.');fileInput.value='';return;}
+  var e=S.entries.find(function(x){return x.uid===entUid;});
+  var note=e?e.note:'';
+  var clientName=e&&e.client?e.client.name:'';
+  var dayKey=todayKey();
+  var arr=Array.from(files);
   fileInput.value='';
-}
-
-// Open full-screen viewer with metadata
-function openPhViewer(entUid,gid,fid,dayKey){
-  loadPhotosForEntry(dayKey,entUid,function(groups){
-    if(!groups||!groups.length)return;
-    var g=groups.find(function(x){return x.gid===gid;});
-    if(!g)return;
-    var f=g.files.find(function(x){return x.fid===fid;});
-    if(!f)return;
-    _phViewerState={entUid:entUid,gid:gid,fid:fid,dayKey:dayKey};
-    var entry=(S.entries||[]).find(function(x){return x.uid===entUid;});
-    var metaLines=[];
-    metaLines.push(empName||'');
-    if(entry){
-      metaLines.push(fmtT(new Date(entry.time)));
-      if(entry.client&&entry.client.name)metaLines.push(entry.client.name+(entry.client.project?' \u2013 '+entry.client.project:''));
-      if(entry.note)metaLines.push(entry.note);
-      if(entry.location&&entry.location.address)metaLines.push(entry.location.address);
-    }
-    metaLines.push(fmtT(new Date(f.ts))+' \u2022 '+(g.files.indexOf(f)+1)+' of '+g.files.length);
-    var content=document.getElementById('phViewerContent');
-    var isVid=f.type&&f.type.indexOf('video')===0;
-    content.innerHTML=isVid
-      ?'<video src="'+f.dataUrl+'" controls autoplay style="max-width:100%;max-height:72vh;border-radius:6px;"></video>'
-      :'<img src="'+f.dataUrl+'" style="max-width:100%;max-height:72vh;border-radius:6px;">';
-    document.getElementById('phViewerInfo').innerHTML=metaLines.filter(Boolean).map(function(l){return'<div>'+l+'</div>';}).join('');
-    document.getElementById('phViewer').style.display='flex';
+  // Show uploading state
+  renderPhotoView();
+  uploadFilesToDrive(entUid,dayKey,arr,note,clientName,function(folderId,count){
+    if(e){e.driveFolder=folderId||e.driveFolder;e.driveCount=(e.driveCount||0)+count;save();}
+    renderPhotoView();
   });
 }
 
-function closePhViewer(){
-  document.getElementById('phViewer').style.display='none';
-  var content=document.getElementById('phViewerContent');
-  var vid=content.querySelector('video');
-  if(vid){vid.pause();vid.src='';}
-  content.innerHTML='';
-}
-
-function deleteCurrentPhoto(){
-  var s=_phViewerState;
-  if(!s.entUid)return;
-  if(!confirm('Delete this photo?'))return;
-  loadPhotosForEntry(s.dayKey,s.entUid,function(groups){
-    if(!groups)groups=[];
-    var g=groups.find(function(x){return x.gid===s.gid;});
-    if(g)g.files=g.files.filter(function(x){return x.fid!==s.fid;});
-    groups=groups.filter(function(x){return x.files.length>0;});
-    savePhotosForEntry(s.dayKey,s.entUid,groups,function(){
-      closePhViewer();
-      var remaining=groups.reduce(function(n,g){return n+g.files.length;},0);
-      if(remaining===0){
-        S.entries=S.entries.filter(function(x){return x.uid!==s.entUid;});
-        deletePhotosForEntry(s.dayKey,s.entUid,null);
-        save();
-      }
-      renderPhotoView();
-    });
-  });
-}
-
-// Render photo cards
+// \u2500\u2500 Photo view renderer \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function renderPhotoView(){
+  gdriveLoadToken();
   var body=document.getElementById('pvBody');
   if(!body)return;
   var dayKey=todayKey();
   var todayLabel=new Date().toLocaleDateString('en-CA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  // Always show the ADD button at top
-  var topBar='<div class="lv-date-hdr" style="margin-bottom:10px;"><span>'+todayLabel+'</span><span class="secln"></span>'
-    +'<label class="btn pr sm" style="cursor:pointer;display:flex;align-items:center;gap:5px;">&#128247; Add photo'
-    +'<input type="file" accept="image/*,video/*" capture="environment" multiple style="display:none;" onchange="openPhotoCaptureFromBtn(this)"></label>'
+  var connected=gdriveIsConnected();
+  // Drive connect bar
+  var connectBar='<div class="drive-connect-bar">'
+    +(connected
+      ?'<span class="drive-status connected">\u2713 Google Drive connected</span>'
+        +'<div style="display:flex;gap:8px;align-items:center;">'
+        +'<a class="drive-folder-link" href="https://drive.google.com/drive/my-drive" target="_blank">Open Drive</a>'
+        +'<button class="btn sm" onclick="gdriveDisconnect()" style="font-size:11px;">Disconnect</button>'
+        +'</div>'
+      :'<span class="drive-status">Google Drive not connected</span>'
+        +'<button class="btn pr sm" onclick="gdriveConnect()" style="font-size:12px;">\uD83D\uDD17 Connect Drive</button>')
+    +'</div>';
+  // Add photo button
+  var addBtn='<div class="lv-date-hdr" style="margin-bottom:10px;"><span>'+todayLabel+'</span><span class="secln"></span>'
+    +(connected
+      ?'<label class="btn pr sm" style="cursor:pointer;display:flex;align-items:center;gap:5px;">\uD83D\uDCF7 Add photo<input type="file" accept="image/*,video/*" capture="environment" multiple style="display:none;" onchange="openPhotoCaptureFromBtn(this)"></label>'
+      :'<button class="btn sm" onclick="gdriveConnect()" style="font-size:12px;">\uD83D\uDD17 Connect to add photos</button>')
     +'</div>';
   var photoEntries=S.entries.filter(function(e){return e.type==='photo';});
   if(!photoEntries.length){
-    body.innerHTML='<div class="lv-wrap" style="padding:14px;">'+topBar
-      +'<div class="lv-empty" style="margin-top:24px;">No photos yet.<br><span style="font-size:12px;margin-top:6px;display:block;">Tap "Add photo" to take or attach a photo.</span></div></div>';
+    body.innerHTML='<div class="lv-wrap" style="padding:14px;">'+connectBar+addBtn
+      +'<div class="lv-empty" style="margin-top:16px;">No photos yet.<br><span style="font-size:12px;margin-top:6px;display:block;">'+(connected?'Tap "Add photo" to take or upload.':'Connect Google Drive first, then tap Add photo.')+'</span></div></div>';
     return;
   }
-  var html='<div class="lv-wrap" style="padding:14px;">'+topBar;
-  // Load all photo groups then render
-  var pending=photoEntries.length;
-  var entryData={};
+  var html='<div class="lv-wrap" style="padding:14px;">'+connectBar+addBtn;
   photoEntries.forEach(function(e){
-    loadPhotosForEntry(dayKey,e.uid,function(groups){
-      entryData[e.uid]=groups||[];
-      pending--;
-      if(pending===0)renderPhotoCards(body,html,photoEntries,entryData,dayKey);
-    });
-  });
-}
-
-function renderPhotoCards(body,html,photoEntries,entryData,dayKey){
-  photoEntries.forEach(function(e){
-    var groups=entryData[e.uid]||[];
-    var totalFiles=groups.reduce(function(n,g){return n+g.files.length;},0);
     var addr=e.location&&e.location.address||'';
     var isCoords=!addr||/^-?[\d]+\.[\d]/.test(addr.trim());
     var locLine=addr?('<div style="font-size:12px;color:var(--tl);margin:3px 0;">\uD83D\uDCCD '+addr+'</div>'):'';
     var clientLine=(e.client&&e.client.name)?('<div style="font-size:12px;color:var(--pu);margin:2px 0;">'+e.client.name+(e.client.project?' \u2013 '+e.client.project:'')+'</div>'):'';
     var noteLine=e.note?('<div style="font-size:12px;color:var(--tx2);font-style:italic;margin:2px 0;">'+e.note+'</div>'):'';
+    var count=e.driveCount||0;
+    var folderUrl=e.driveFolder?'https://drive.google.com/drive/folders/'+e.driveFolder:null;
+    var photosBadge=folderUrl
+      ?('<a class="ph-count-badge" href="'+folderUrl+'" target="_blank">'
+        +'\uD83D\uDCC1 '+count+' photo'+(count!==1?'s':'')+' in Drive \u2192</a>')
+      :(count>0?'<span class="ph-count-badge">\u23F3 Uploading...</span>':'');
+    var uploadMoreLabel=connected
+      ?('<label class="photo-add-btn" title="Upload more photos to this log">\uD83D\uDCF7'
+        +'<input type="file" accept="image/*,video/*" capture="environment" multiple style="display:none;" onchange="addMorePhotos(\''+e.uid+'\',this)"></label>')
+      :'';
     html+='<div class="card" style="margin-bottom:10px;padding:11px 12px;">'
-      // Header row
       +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
-      +'<div><span style="font-weight:600;font-size:14px;">\uD83D\uDCF7 '+fmtT(new Date(e.time))+'</span>'
-      +(totalFiles>0?'<span style="font-size:11px;color:var(--tx3);margin-left:6px;">\u2022 '+totalFiles+' file'+(totalFiles>1?'s':'')+'</span>':'')
-      +'</div>'
+      +'<div><span style="font-weight:600;font-size:14px;">\uD83D\uDCF7 '+fmtT(new Date(e.time))+'</span></div>'
       +'<div style="display:flex;gap:6px;">'
       +'<button class="ibtn" onclick="openPhotoEditModal(\''+e.uid+'\',\''+dayKey+'\')">Edit</button>'
       +'<button class="ibtn del" onclick="deletePhotoEntry(\''+e.uid+'\',\''+dayKey+'\')">x</button>'
       +'</div></div>'
       +locLine+clientLine+noteLine
-      // Thumbnails
-      +'<div class="photo-strip" style="margin-top:8px;">';
-    groups.forEach(function(g){
-      if(!g.files.length)return;
-      var start=new Date(g.startTime);
-      var end=new Date(g.files[g.files.length-1].ts);
-      var lbl=fmtT(start)+(g.files.length>1?(' \u2013 '+fmtT(end)):'');
-      html+='<div class="photo-group-lbl">'+(g.files.length>1?(g.files.length+' items \u2022 '):'') +lbl+'</div>';
-      g.files.forEach(function(f){
-        var isVid=f.type&&f.type.indexOf('video')===0;
-        html+='<div class="photo-thumb" onclick="openPhViewer(\''+e.uid+'\',\''+g.gid+'\',\''+f.fid+'\',\''+dayKey+'\')">'
-          +(isVid?'<video src="'+f.dataUrl+'" style="width:100%;height:100%;object-fit:cover;" muted playsinline></video><span class="ph-vid-badge">&#9654;</span>':'<img src="'+f.dataUrl+'" alt="photo">')
-          +'</div>';
-      });
-    });
-    // Add more button
-    html+='<label class="photo-add-btn" title="Add more photos">&#128247;'
-      +'<input type="file" accept="image/*,video/*" capture="environment" multiple style="display:none;" onchange="addMorePhotos(\''+e.uid+'\',this)"></label>'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">'
+      +photosBadge+uploadMoreLabel
       +'</div></div>';
   });
   html+='</div>';
   body.innerHTML=html;
 }
 
-// Edit modal for existing photo entry
+// \u2500\u2500 Edit modal \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 var _peEditUid=null,_peDayKey=null;
 function openPhotoEditModal(entUid,dayKey){
   _peEditUid=entUid;_peDayKey=dayKey;
-  var e=S.entries.find(function(x){return x.uid===entUid;});
-  if(!e)return;
-  // Reuse meta modal fields
+  var e=S.entries.find(function(x){return x.uid===entUid;});if(!e)return;
   var sel=document.getElementById('pmCat');
   if(sel){sel.innerHTML='<option value="">-- pick --</option>';(CATS||[]).forEach(function(c){var o=document.createElement('option');o.value=c;o.textContent=c;if(c===e.tag)o.selected=true;sel.appendChild(o);});}
   document.getElementById('pmNote').value=e.note||'';
@@ -2162,7 +2150,6 @@ function openPhotoEditModal(entUid,dayKey){
   document.getElementById('pmPreview').innerHTML='';
   var cb=document.getElementById('pmClientBtns');
   if(cb){cb.innerHTML='';(CLIENT_PRESETS||[]).forEach(function(p){var b=document.createElement('button');b.className='btn sm';b.type='button';b.textContent=p;b.style.cssText='font-size:11px;padding:3px 9px;';b.onclick=function(){document.getElementById('pmClientName').value=p;document.getElementById('pmClientProject').value='';};cb.appendChild(b);});}
-  // Change save button to update
   var modal=document.getElementById('photoMetaModal');
   if(modal){
     modal.querySelector('h3').textContent='\uD83D\uDCF7 Edit photo log';
@@ -2181,39 +2168,22 @@ function savePhotoEdit(){
     var cp=(document.getElementById('pmClientProject').value||'').trim();
     e.client=cn?{name:cn,project:cp,hours:0,hoursManual:false}:null;
   }
-  save();
-  closePhotoMetaModal();
-  // Restore save button
-  var saveBtn=document.querySelector('#photoMetaModal .btn.pr.sm');
-  if(saveBtn)saveBtn.setAttribute('onclick','savePhotoWithMeta()');
-  var h3=document.querySelector('#photoMetaModal h3');
-  if(h3)h3.textContent='\uD83D\uDCF7 Add photo';
-  _peEditUid=null;_peDayKey=null;
-  renderPhotoView();
+  save();closePhotoMetaModal();renderPhotoView();
 }
 
+// \u2500\u2500 Delete \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 function deletePhotoEntry(entUid,dayKey){
-  if(!confirm('Delete this photo entry and all its photos?'))return;
-  deletePhotosForEntry(dayKey,entUid,function(){
-    S.entries=S.entries.filter(function(e){return e.uid!==entUid;});
-    save();renderPhotoView();
-  });
-}
-
-// Attempt JSONP geocode and update the link text + saved entry if resolved.
-
-function deletePhotoEntry(entUid,dayKey){
-  if(!confirm('Delete this photo entry and all its photos?'))return;
-  // Remove files from storage
-  var all=loadPhotos(dayKey);
-  delete all[entUid];
-  savePhotos(dayKey,all);
-  // Remove entry from S
+  if(!confirm('Remove this photo log entry?\n(Photos already uploaded to Drive will remain there.)'))return;
   S.entries=S.entries.filter(function(e){return e.uid!==entUid;});
-  save();
-  renderPhotoView();
+  save();renderPhotoView();
 }
 
+// \u2500\u2500 Full-screen viewer (Drive entries have no local data -- open folder instead) \u2500\u2500
+function openPhViewer(entUid,gid,fid,dayKey){
+  // Legacy -- redirect to Drive folder if available
+  var e=(S.entries||[]).find(function(x){return x.uid===entUid;});
+  if(e&&e.driveFolder){window.open('https://drive.google.com/drive/folders/'+e.driveFolder,'_blank');}
+}
 // Attempt JSONP geocode and update the link text + saved entry if resolved.
 function resolveStreetName(entUid,lat,lng,entries,saveFn){
   reverseGeocode(lat,lng,function(addr){
