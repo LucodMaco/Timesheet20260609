@@ -1659,23 +1659,221 @@ function dvSubmitPast(){
 function doPrint(k){buildPrintSheet(k);setTimeout(()=>window.print(),250);}
 
 // == View toggle ==
-// == PHOTO / VIDEO CAPTURE SYSTEM ==
-// Photos are their own entry type ('photo') in S.entries.
-// Files stored as base64 in ts_photos_YYYY-MM-DD keyed by entry uid.
-// Grouping: photos taken within 5 min of the FIRST photo's time (per photo-entry) are grouped.
+var currentView='simple';
+function setView(v){
+  currentView=v;
+  if(v==='simple'||v==='full')_lsSet('ts_view',v);
+  document.getElementById('vtFull').className='vt-btn'+(v==='full'?' active':'');
+  document.getElementById('vtSimple').className='vt-btn'+(v==='simple'?' active':'');
+  document.getElementById('vtLoc').className='vt-btn'+(v==='loc'?' active':'');
+  document.getElementById('vtPhoto').className='vt-btn'+(v==='photo'?' active':'');
+  document.getElementById('abody').style.display=v==='full'?'block':'none';
+  document.getElementById('svWrap').style.display=v==='simple'?'block':'none';
+  document.getElementById('lvWrap').style.display=v==='loc'?'block':'none';
+  document.getElementById('pvWrap').style.display=v==='photo'?'block':'none';
+  if(v==='simple')svRender();
+  if(v==='full')renderAll();
+  if(v==='loc')renderLocView();
+  if(v==='photo')renderPhotoView();
+}
 
+// == Location view ==
+// Haversine distance between two lat/lng points in km
+function haversine(lat1,lng1,lat2,lng2){
+  var R=6371,dLat=(lat2-lat1)*Math.PI/180,dLng=(lng2-lng1)*Math.PI/180;
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2);
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function autoDistance(entries){
+  var pts=entries.filter(function(e){return e.location&&e.location.lat&&e.location.lng;});
+  var total=0;
+  for(var i=1;i<pts.length;i++){
+    var d=haversine(pts[i-1].location.lat,pts[i-1].location.lng,pts[i].location.lat,pts[i].location.lng);
+    if(d>0.05)total+=d;
+  }
+  return total;
+}
+// Trip modal
+function openTripModal(){
+  var m=document.getElementById('tripModal');
+  if(m){
+    document.getElementById('tripFrom').value='';
+    document.getElementById('tripTo').value='';
+    document.getElementById('tripDist').value='';
+    document.getElementById('tripPurpose').value='';
+    m.classList.add('open');
+  }
+}
+function closeTripModal(){var m=document.getElementById('tripModal');if(m)m.classList.remove('open');}
+function saveTripEntry(){
+  if(!S.trips)S.trips=[];
+  var from=(document.getElementById('tripFrom').value||'').trim();
+  var to=(document.getElementById('tripTo').value||'').trim();
+  var dist=parseFloat(document.getElementById('tripDist').value)||0;
+  var unit=document.getElementById('tripUnit').value||'km';
+  var purpose=(document.getElementById('tripPurpose').value||'').trim();
+  if(!dist){alert('Please enter a distance.');return;}
+  if(!from&&!to){alert('Please enter at least a start or end location.');return;}
+  S.trips.push({from:from,to:to,dist:dist,unit:unit,purpose:purpose,time:new Date().toISOString()});
+  save();closeTripModal();renderLocView();
+}
+function deleteTripEntry(idx){
+  if(!S.trips)return;
+  S.trips.splice(idx,1);
+  save();renderLocView();
+}
+
+function renderLocView(){
+  var body=document.getElementById('lvBody');
+  if(!body)return;
+  if(!S.trips)S.trips=[];
+  var locEntries=S.entries.filter(function(e){return e.location&&(e.location.lat||e.location.address);});
+  var hasAnything=locEntries.length||S.trips.length;
+  if(!hasAnything){
+    body.innerHTML='<div class="lv-empty">&#128205; No location data yet.<br><span style="font-size:12px;margin-top:6px;display:block;">Captured automatically when you clock in, log, or clock out.</span></div>';
+    return;
+  }
+  var todayLabel=new Date().toLocaleDateString('en-CA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  var html='<div class="lv-date-group"><div class="lv-date-hdr"><span>'+todayLabel+'</span><span class="secln"></span></div>';
+  // Auto distance summary
+  var autoDist=autoDistance(S.entries);
+  var manualKm=S.trips.reduce(function(sum,t){return sum+(t.unit==='mi'?t.dist*1.60934:t.dist);},0);
+  html+='<div class="lv-mile-summary">'
+    +'<div class="lv-mile-auto">GPS movement today: <strong>'+autoDist.toFixed(1)+' km</strong>'
+    +(autoDist>0?' across '+locEntries.length+' point'+(locEntries.length!==1?'s':''):'')+'</div>'
+    +(manualKm>0?'<div style="font-size:13px;font-weight:600;color:var(--tx);">Logged: '+manualKm.toFixed(1)+' km</div>':'')
+    +'</div>';
+  // Location entries
+  if(locEntries.length){
+    locEntries.forEach(function(e){
+      var dot=e.type==='clock-in'?'#2a6e4a':e.type==='clock-out'?'#952020':e.type==='break'?'#b05008':e.type==='photo'?'#5c3d8a':'#1a4f7a';
+      var isPhoto=e.type==='photo';
+      var typeLbl=e.type==='clock-in'?'Clock in':e.type==='clock-out'?'Clock out':e.type==='break'?'Break':isPhoto?'\uD83D\uDCF7 Photo':'Activity';
+      var typeBg=e.type==='clock-in'?'background:var(--gn-bg);color:var(--gn-dk);':e.type==='clock-out'?'background:var(--rd-bg);color:var(--rd);':e.type==='break'?'background:var(--am-bg);color:var(--am);':isPhoto?'background:#ede8fc;color:#5c3d8a;':'background:var(--bl-bg);color:var(--bl);';
+      var timeStr=e.needsTime?'pending':fmtT(new Date(e.time));
+      var lat=e.location.lat||0,lng=e.location.lng||0;
+      var addr=e.location.address||'';
+      var isCoords=!addr||/^-?[\d]+\.[\d]/.test(addr.trim());
+      var displayAddr=isCoords?(lat.toFixed(5)+', '+lng.toFixed(5)):addr;
+      var mapsUrl='https://maps.google.com/?q='+lat+','+lng;
+      var note=e.note?('<div style="padding:2px 14px 8px;font-size:12px;color:var(--tx2);font-style:italic;">'+esc(e.note)+'</div>'):'';
+      html+='<div class="lv-entry" id="lve_'+e.uid+'">'
+        +'<div class="lv-row">'
+        +'<span class="lv-time">'+timeStr+'</span>'
+        +'<span class="lv-dot" style="background:'+dot+'"></span>'
+        +'<a class="lv-addr-link" id="lvaddr_'+e.uid+'" href="'+mapsUrl+'" target="_blank">'+esc(displayAddr)+'</a>'
+        +'<span class="lv-type" style="'+typeBg+'">'+typeLbl+(e.tag&&!isPhoto?' &ndash; '+esc(e.tag):'')+'</span>'
+        +'</div>'+note+'</div>';
+    });
+  }
+  // Trips section
+  html+='<div class="lv-trips-hdr">'
+    +'<span class="lv-trips-hdr-lbl">&#128663; Trips logged</span>'
+    +'<button class="btn pr sm" onclick="openTripModal()" style="font-size:12px;padding:3px 10px;">+ Log trip</button>'
+    +'</div>';
+  if(S.trips.length){
+    S.trips.forEach(function(t,i){
+      var distLabel=t.dist.toFixed(1)+' '+t.unit;
+      var route=esc(t.from)+(t.to?' &rarr; '+esc(t.to):'');
+      html+='<div class="lv-trip-entry">'
+        +'<div class="lv-trip-dist">'+distLabel+'</div>'
+        +'<div style="flex:1;min-width:0;"><div class="lv-trip-route">'+route+'</div>'
+        +(t.purpose?'<div class="lv-trip-purpose">'+esc(t.purpose)+'</div>':'')
+        +'</div>'
+        +'<button class="lv-trip-del" onclick="deleteTripEntry('+i+')" title="Delete">&#10005;</button>'
+        +'</div>';
+    });
+    var tripTotalKm=S.trips.reduce(function(s,t){return s+(t.unit==='mi'?t.dist*1.60934:t.dist);},0);
+    html+='<div class="lv-trip-total">Total: '+tripTotalKm.toFixed(1)+' km &nbsp;/&nbsp; '+(tripTotalKm/1.60934).toFixed(1)+' mi</div>';
+  } else {
+    html+='<div style="font-size:13px;color:var(--tx3);padding:8px 0 4px;">No trips logged today.</div>';
+  }
+  html+='</div>';
+  body.innerHTML=html;
+  // Background street resolution
+  locEntries.forEach(function(e){
+    var addr=e.location.address||'';
+    var isCoords=!addr||/^-?[\d]+\.[\d]/.test(addr.trim());
+    if(isCoords&&e.location.lat) resolveStreetName(e.uid,e.location.lat,e.location.lng,S.entries,save);
+  });
+}
+
+// == PHOTO / VIDEO CAPTURE SYSTEM ==
+// Uses IndexedDB for photo storage -- handles large files, no 5MB limit.
+// DB: 'ts_photos', store: 'files', key: dayKey+'_'+entUid
+
+var _phDB=null;
 var _phViewerState={entUid:null,gid:null,fid:null,dayKey:null};
 var GROUP_WINDOW_MS=5*60*1000;
 
-function loadPhotos(dayKey){
-  try{var d=_lsGet('ts_photos_'+dayKey);return d?JSON.parse(d):{};}catch(e){return{};}
-}
-function savePhotos(dayKey,photos){
-  try{_lsSet('ts_photos_'+dayKey,JSON.stringify(photos));}
-  catch(e){if(e.name==='QuotaExceededError')alert('Storage full - older photos may need to be cleared.');}
+function openPhDB(cb){
+  if(_phDB){cb(_phDB);return;}
+  var req=indexedDB.open('ts_photos',1);
+  req.onupgradeneeded=function(e){
+    var db=e.target.result;
+    if(!db.objectStoreNames.contains('files'))db.createObjectStore('files');
+  };
+  req.onsuccess=function(e){_phDB=e.target.result;cb(_phDB);};
+  req.onerror=function(){cb(null);};
 }
 
-// Called from the camera button \u2014 creates a Photo entry then attaches files
+function loadPhotos(dayKey,cb){
+  openPhDB(function(db){
+    if(!db){cb({});return;}
+    var tx=db.transaction('files','readonly');
+    var store=tx.objectStore('files');
+    var result={};
+    // Get all keys for this day
+    var req=store.openCursor();
+    req.onsuccess=function(e){
+      var cursor=e.target.result;
+      if(cursor){
+        var key=cursor.key;
+        if(key.indexOf(dayKey+'_')===0){
+          var entUid=key.slice(dayKey.length+1);
+          result[entUid]=cursor.value;
+        }
+        cursor.continue();
+      } else {
+        cb(result);
+      }
+    };
+    req.onerror=function(){cb({});};
+  });
+}
+
+function loadPhotosForEntry(dayKey,entUid,cb){
+  openPhDB(function(db){
+    if(!db){cb([]);return;}
+    var tx=db.transaction('files','readonly');
+    var store=tx.objectStore('files');
+    var req=store.get(dayKey+'_'+entUid);
+    req.onsuccess=function(e){cb(e.target.result||[]);};
+    req.onerror=function(){cb([]);};
+  });
+}
+
+function savePhotosForEntry(dayKey,entUid,groups,cb){
+  openPhDB(function(db){
+    if(!db){if(cb)cb();return;}
+    var tx=db.transaction('files','readwrite');
+    var store=tx.objectStore('files');
+    var req=store.put(groups,dayKey+'_'+entUid);
+    req.onsuccess=function(){if(cb)cb();};
+    req.onerror=function(){if(cb)cb();};
+  });
+}
+
+function deletePhotosForEntry(dayKey,entUid,cb){
+  openPhDB(function(db){
+    if(!db){if(cb)cb();return;}
+    var tx=db.transaction('files','readwrite');
+    var store=tx.objectStore('files');
+    store.delete(dayKey+'_'+entUid);
+    tx.oncomplete=function(){if(cb)cb();};
+  });
+}
+
 // State for photo metadata modal
 var _pmFiles=null;
 
@@ -1694,8 +1892,7 @@ function openPhotoCaptureFromBtn(fileInput){
   if(cb){
     cb.innerHTML='';
     (CLIENT_PRESETS||[]).forEach(function(p){
-      var b=document.createElement('button');
-      b.className='btn sm';b.type='button';b.textContent=p;
+      var b=document.createElement('button');b.className='btn sm';b.type='button';b.textContent=p;
       b.style.cssText='font-size:11px;padding:3px 9px;';
       b.onclick=function(){document.getElementById('pmClientName').value=p;document.getElementById('pmClientProject').value='';};
       cb.appendChild(b);
@@ -1704,7 +1901,7 @@ function openPhotoCaptureFromBtn(fileInput){
   // Show file previews
   var prev=document.getElementById('pmPreview');
   if(prev){
-    prev.innerHTML='';
+    prev.innerHTML='<div style="font-size:11px;color:var(--tx3);width:100%;margin-bottom:4px;">'+_pmFiles.length+' file'+ (_pmFiles.length>1?'s':'') +' selected</div>';
     for(var i=0;i<Math.min(_pmFiles.length,6);i++){
       (function(f){
         var reader=new FileReader();
@@ -1742,7 +1939,7 @@ function savePhotoWithMeta(){
   var t=new Date();
   var dayKey=todayKey();
   var now=Date.now();
-  // Look for a recent photo entry within GROUP_WINDOW_MS to group into
+  // Look for a recent photo entry within GROUP_WINDOW_MS
   var existingEnt=null;
   for(var i=S.entries.length-1;i>=0;i--){
     var e2=S.entries[i];
@@ -1768,62 +1965,46 @@ function savePhotoWithMeta(){
   _pmFiles=null;
   attachFilesToEntry(entUid,dayKey,filesToSave,function(){
     save();
-    if(currentView==='photo') renderPhotoView();
-    else if(currentView==='full') renderAll();
-    else if(currentView==='simple') svRender();
+    renderPhotoView();
   });
 }
 
-// Attach files to entry photo store -- handles FileList or Array
+// Attach files to entry using IndexedDB
 function attachFilesToEntry(entUid,dayKey,files,doneCb){
   var now=Date.now();
-  var all=loadPhotos(dayKey);
-  if(!all[entUid])all[entUid]=[];
-  var groups=all[entUid];
-  // Find or create a group within GROUP_WINDOW_MS
-  var targetGroup=null;
-  for(var i=groups.length-1;i>=0;i--){
-    if(now-groups[i].startTime<=GROUP_WINDOW_MS){targetGroup=groups[i];break;}
-  }
-  if(!targetGroup){targetGroup={gid:'g'+now,startTime:now,files:[]};groups.push(targetGroup);}
   var arr=Array.from(files);
-  var remaining=arr.length;
-  if(remaining===0){savePhotos(dayKey,all);if(doneCb)doneCb();return;}
-  arr.forEach(function(file){
-    var reader=new FileReader();
-    reader.onload=function(ev){
-      targetGroup.files.push({fid:'f'+Date.now()+Math.floor(Math.random()*99999),dataUrl:ev.target.result,type:file.type,name:file.name||'photo',ts:Date.now()});
-      remaining--;
-      if(remaining===0){savePhotos(dayKey,all);if(doneCb)doneCb();}
-    };
-    reader.onerror=function(){remaining--;if(remaining===0){savePhotos(dayKey,all);if(doneCb)doneCb();}};
-    reader.readAsDataURL(file);
-  });
-}
-
-// Build the photo entry display
-function buildPhotoEntryBody(e,editable){
-  var dayKey=todayKey();
-  var groups=loadPhotos(dayKey)[e.uid]||[];
-  var html='<div class="photo-strip">';
-  groups.forEach(function(g){
-    if(!g.files.length)return;
-    var start=new Date(g.startTime);
-    var end=new Date(g.files[g.files.length-1].ts);
-    var lbl=fmtT(start)+(g.files.length>1?(' \u2013 '+fmtT(end)):'');
-    html+='<div class="photo-group-lbl">'+(g.files.length>1?(g.files.length+' items \u2022 '):'') +lbl+'</div>';
-    g.files.forEach(function(f){
-      var isVid=f.type&&f.type.indexOf('video')===0;
-      html+='<div class="photo-thumb" onclick="openPhViewer(\''+e.uid+'\',\''+g.gid+'\',\''+f.fid+'\',\''+dayKey+'\')">'
-        +(isVid?'<video src="'+f.dataUrl+'" style="width:100%;height:100%;object-fit:cover;" muted playsinline></video><span class="ph-vid-badge">&#9654;</span>':'<img src="'+f.dataUrl+'" alt="photo">')+'</div>';
+  if(!arr.length){if(doneCb)doneCb();return;}
+  loadPhotosForEntry(dayKey,entUid,function(groups){
+    if(!groups||!Array.isArray(groups))groups=[];
+    // Find or create group within GROUP_WINDOW_MS
+    var targetGroup=null;
+    for(var i=groups.length-1;i>=0;i--){
+      if(now-groups[i].startTime<=GROUP_WINDOW_MS){targetGroup=groups[i];break;}
+    }
+    if(!targetGroup){targetGroup={gid:'g'+now,startTime:now,files:[]};groups.push(targetGroup);}
+    var remaining=arr.length;
+    arr.forEach(function(file){
+      var reader=new FileReader();
+      reader.onload=function(ev){
+        targetGroup.files.push({
+          fid:'f'+Date.now()+Math.floor(Math.random()*99999),
+          dataUrl:ev.target.result,
+          type:file.type,
+          name:file.name||'photo',
+          ts:Date.now()
+        });
+        remaining--;
+        if(remaining===0){
+          savePhotosForEntry(dayKey,entUid,groups,doneCb);
+        }
+      };
+      reader.onerror=function(){
+        remaining--;
+        if(remaining===0)savePhotosForEntry(dayKey,entUid,groups,doneCb);
+      };
+      reader.readAsDataURL(file);
     });
   });
-  if(editable){
-    html+='<label class="photo-add-btn" title="Add more photos">&#128247;'
-      +'<input type="file" accept="image/*,video/*" capture="environment" multiple style="display:none;" onchange="addMorePhotos(\''+e.uid+'\',this)"></label>';
-  }
-  html+='</div>';
-  return html;
 }
 
 function addMorePhotos(entUid,fileInput){
@@ -1833,34 +2014,35 @@ function addMorePhotos(entUid,fileInput){
   fileInput.value='';
 }
 
-
 // Open full-screen viewer with metadata
 function openPhViewer(entUid,gid,fid,dayKey){
-  var all=loadPhotos(dayKey);
-  var groups=(all[entUid]||[]);
-  var g=groups.find(function(x){return x.gid===gid;});
-  if(!g)return;
-  var f=g.files.find(function(x){return x.fid===fid;});
-  if(!f)return;
-  _phViewerState={entUid:entUid,gid:gid,fid:fid,dayKey:dayKey};
-  // Build metadata from the entry
-  var entry=(S.entries||[]).find(function(x){return x.uid===entUid;});
-  var metaLines=[];
-  metaLines.push(empName||'Unknown');
-  if(entry){
-    metaLines.push(fmtT(new Date(entry.time)));
-    if(entry.client&&entry.client.name)metaLines.push(entry.client.name+(entry.client.project?' \u2013 '+entry.client.project:''));
-    if(entry.location&&entry.location.address)metaLines.push(entry.location.address);
-  }
-  metaLines.push(fmtT(new Date(f.ts))+' \u2022 '+(g.files.indexOf(f)+1)+' of '+g.files.length);
-  var content=document.getElementById('phViewerContent');
-  var isVid=f.type&&f.type.indexOf('video')===0;
-  content.innerHTML=isVid
-    ?'<video src="'+f.dataUrl+'" controls autoplay style="max-width:100%;max-height:72vh;border-radius:6px;"></video>'
-    :'<img src="'+f.dataUrl+'" style="max-width:100%;max-height:72vh;border-radius:6px;">';
-  document.getElementById('phViewerInfo').innerHTML=metaLines.map(function(l){return'<div>'+l+'</div>';}).join('');
-  document.getElementById('phViewer').style.display='flex';
+  loadPhotosForEntry(dayKey,entUid,function(groups){
+    if(!groups||!groups.length)return;
+    var g=groups.find(function(x){return x.gid===gid;});
+    if(!g)return;
+    var f=g.files.find(function(x){return x.fid===fid;});
+    if(!f)return;
+    _phViewerState={entUid:entUid,gid:gid,fid:fid,dayKey:dayKey};
+    var entry=(S.entries||[]).find(function(x){return x.uid===entUid;});
+    var metaLines=[];
+    metaLines.push(empName||'');
+    if(entry){
+      metaLines.push(fmtT(new Date(entry.time)));
+      if(entry.client&&entry.client.name)metaLines.push(entry.client.name+(entry.client.project?' \u2013 '+entry.client.project:''));
+      if(entry.note)metaLines.push(entry.note);
+      if(entry.location&&entry.location.address)metaLines.push(entry.location.address);
+    }
+    metaLines.push(fmtT(new Date(f.ts))+' \u2022 '+(g.files.indexOf(f)+1)+' of '+g.files.length);
+    var content=document.getElementById('phViewerContent');
+    var isVid=f.type&&f.type.indexOf('video')===0;
+    content.innerHTML=isVid
+      ?'<video src="'+f.dataUrl+'" controls autoplay style="max-width:100%;max-height:72vh;border-radius:6px;"></video>'
+      :'<img src="'+f.dataUrl+'" style="max-width:100%;max-height:72vh;border-radius:6px;">';
+    document.getElementById('phViewerInfo').innerHTML=metaLines.filter(Boolean).map(function(l){return'<div>'+l+'</div>';}).join('');
+    document.getElementById('phViewer').style.display='flex';
+  });
 }
+
 function closePhViewer(){
   document.getElementById('phViewer').style.display='none';
   var content=document.getElementById('phViewerContent');
@@ -1868,240 +2050,157 @@ function closePhViewer(){
   if(vid){vid.pause();vid.src='';}
   content.innerHTML='';
 }
+
 function deleteCurrentPhoto(){
   var s=_phViewerState;
   if(!s.entUid)return;
   if(!confirm('Delete this photo?'))return;
-  var all=loadPhotos(s.dayKey);
-  var groups=all[s.entUid]||[];
-  var g=groups.find(function(x){return x.gid===s.gid;});
-  if(!g)return;
-  g.files=g.files.filter(function(x){return x.fid!==s.fid;});
-  all[s.entUid]=groups.filter(function(x){return x.files.length>0;});
-  savePhotos(s.dayKey,all);
-  closePhViewer();
-  // If the photo entry now has no photos, remove the entry too
-  var remaining=(all[s.entUid]||[]).reduce(function(n,g){return n+g.files.length;},0);
-  if(remaining===0){
-    S.entries=S.entries.filter(function(x){return x.uid!==s.entUid;});
-    save();
-  }
-  renderAll();
-}
-let currentView='full';
-function setView(v){
-  currentView=v;
-  // Persist simple/full only; photo/loc always revert to simple on reload
-  if(v==='simple'||v==='full') _lsSet('ts_view',v);
-  document.getElementById('vtFull').className='vt-btn'+(v==='full'?' active':'');
-  document.getElementById('vtSimple').className='vt-btn'+(v==='simple'?' active':'');
-  document.getElementById('vtLoc').className='vt-btn'+(v==='loc'?' active':'');
-  document.getElementById('vtPhoto').className='vt-btn'+(v==='photo'?' active':'');
-  document.getElementById('abody').style.display=v==='full'?'block':'none';
-  document.getElementById('svWrap').style.display=v==='simple'?'block':'none';
-  document.getElementById('lvWrap').style.display=v==='loc'?'block':'none';
-  document.getElementById('pvWrap').style.display=v==='photo'?'block':'none';
-  if(v==='simple')svRender();
-  if(v==='full')renderAll();
-  if(v==='loc')renderLocView();
-  if(v==='photo')renderPhotoView();
-}
-
-// Haversine distance between two lat/lng points in km
-function haversine(lat1,lng1,lat2,lng2){
-  var R=6371,dLat=(lat2-lat1)*Math.PI/180,dLng=(lng2-lng1)*Math.PI/180;
-  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2);
-  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-}
-
-// Compute auto distance: sum haversine between consecutive located entries
-function autoDistance(entries){
-  var pts=entries.filter(function(e){return e.location&&e.location.lat&&e.location.lng;});
-  var total=0;
-  for(var i=1;i<pts.length;i++){
-    var d=haversine(pts[i-1].location.lat,pts[i-1].location.lng,pts[i].location.lat,pts[i].location.lng);
-    if(d>0.05) total+=d; // ignore micro-movements under 50m (GPS jitter)
-  }
-  return total;
-}
-
-function renderLocView(){
-  var body=document.getElementById('lvBody');
-  if(!body)return;
-  if(!S.trips)S.trips=[];
-  var locEntries=S.entries.filter(function(e){return e.location&&(e.location.lat||e.location.address);});
-  var hasAnything=locEntries.length||S.trips.length;
-  if(!hasAnything){
-    body.innerHTML='<div class="lv-empty">&#128205; No location data yet.<br><span style="font-size:12px;margin-top:6px;display:block;">Captured automatically when you clock in, log, or clock out.</span></div>';
-    return;
-  }
-  var todayLabel=new Date().toLocaleDateString('en-CA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  var html='<div class="lv-date-group"><div class="lv-date-hdr"><span>'+todayLabel+'</span><span class="secln"></span></div>';
-
-  // -- Auto distance summary (Option 2) --
-  var autoDist=autoDistance(S.entries);
-  var manualKm=S.trips.reduce(function(sum,t){return sum+(t.unit==='mi'?t.dist*1.60934:t.dist);},0);
-  var totalKm=manualKm; // auto dist is supplemental info only
-  html+='<div class="lv-mile-summary">'
-    +'<div class="lv-mile-auto">GPS movement today: <strong>'+autoDist.toFixed(1)+' km</strong>'
-    +(autoDist>0?' across '+locEntries.length+' location point'+(locEntries.length!==1?'s':''):'')+'</div>'
-    +(manualKm>0?'<div style="font-size:13px;font-weight:600;color:var(--tx);">Logged: '+manualKm.toFixed(1)+' km</div>':'')
-    +'</div>';
-
-  // -- Location entries --
-  if(locEntries.length){
-    locEntries.forEach(function(e){
-      var dot=e.type==='clock-in'?'#2a6e4a':e.type==='clock-out'?'#952020':e.type==='break'?'#b05008':'#1a4f7a';
-      var typeLbl=e.type==='clock-in'?'Clock in':e.type==='clock-out'?'Clock out':e.type==='break'?'Break':'Activity';
-      var typeBg=e.type==='clock-in'?'background:var(--gn-bg);color:var(--gn-dk);':e.type==='clock-out'?'background:var(--rd-bg);color:var(--rd);':e.type==='break'?'background:var(--am-bg);color:var(--am);':'background:var(--bl-bg);color:var(--bl);';
-      var timeStr=e.needsTime?'pending':fmtT(new Date(e.time));
-      var lat=e.location.lat||0,lng=e.location.lng||0;
-      var addr=e.location.address||'';
-      var isCoords=!addr||/^-?[\d]+\.[\d]/.test(addr.trim());
-      var displayAddr=isCoords?(lat.toFixed(5)+', '+lng.toFixed(5)):addr;
-      var mapsUrl='https://maps.google.com/?q='+lat+','+lng;
-      var note=e.note?('<div style="padding:2px 14px 8px;font-size:12px;color:var(--tx2);font-style:italic;">'+esc(e.note)+'</div>'):'';
-      html+='<div class="lv-entry" id="lve_'+e.uid+'">'
-        +'<div class="lv-row">'
-        +'<span class="lv-time">'+timeStr+'</span>'
-        +'<span class="lv-dot" style="background:'+dot+'"></span>'
-        +'<a class="lv-addr-link" id="lvaddr_'+e.uid+'" href="'+mapsUrl+'" target="_blank">'+esc(displayAddr)+'</a>'
-        +'<span class="lv-type" style="'+typeBg+'">'+typeLbl+(e.tag?' &ndash; '+esc(e.tag):'')+'</span>'
-        +'</div>'+note+'</div>';
+  loadPhotosForEntry(s.dayKey,s.entUid,function(groups){
+    if(!groups)groups=[];
+    var g=groups.find(function(x){return x.gid===s.gid;});
+    if(g)g.files=g.files.filter(function(x){return x.fid!==s.fid;});
+    groups=groups.filter(function(x){return x.files.length>0;});
+    savePhotosForEntry(s.dayKey,s.entUid,groups,function(){
+      closePhViewer();
+      var remaining=groups.reduce(function(n,g){return n+g.files.length;},0);
+      if(remaining===0){
+        S.entries=S.entries.filter(function(x){return x.uid!==s.entUid;});
+        deletePhotosForEntry(s.dayKey,s.entUid,null);
+        save();
+      }
+      renderPhotoView();
     });
-  }
-
-  // -- Trips section (Option 1) --
-  html+='<div class="lv-trips-hdr">'
-    +'<span class="lv-trips-hdr-lbl">&#128663; Trips logged</span>'
-    +'<button class="btn pr sm" onclick="openTripModal()" style="font-size:12px;padding:3px 10px;">+ Log trip</button>'
-    +'</div>';
-  if(S.trips.length){
-    S.trips.forEach(function(t,i){
-      var distLabel=t.dist.toFixed(1)+' '+t.unit;
-      var route=esc(t.from)+(t.to?' &rarr; '+esc(t.to):'');
-      html+='<div class="lv-trip-entry">'
-        +'<div class="lv-trip-dist">'+distLabel+'</div>'
-        +'<div style="flex:1;min-width:0;">'
-        +'<div class="lv-trip-route">'+route+'</div>'
-        +(t.purpose?'<div class="lv-trip-purpose">'+esc(t.purpose)+'</div>':'')
-        +'</div>'
-        +'<button class="lv-trip-del" onclick="deleteTripEntry('+i+')" title="Delete">&#10005;</button>'
-        +'</div>';
-    });
-    var tripTotalKm=S.trips.reduce(function(s,t){return s+(t.unit==='mi'?t.dist*1.60934:t.dist);},0);
-    var tripTotalMi=tripTotalKm/1.60934;
-    html+='<div class="lv-trip-total">Total: '+tripTotalKm.toFixed(1)+' km &nbsp;/&nbsp; '+tripTotalMi.toFixed(1)+' mi</div>';
-  } else {
-    html+='<div style="font-size:13px;color:var(--tx3);padding:8px 0 4px;">No trips logged today.</div>';
-  }
-
-  html+='</div>';
-  body.innerHTML=html;
-
-  // Background street name resolution
-  locEntries.forEach(function(e){
-    var addr=e.location.address||'';
-    var isCoords=!addr||/^-?[\d]+\.[\d]/.test(addr.trim());
-    if(isCoords&&e.location.lat){
-      resolveStreetName(e.uid,e.location.lat,e.location.lng,S.entries,save);
-    }
   });
 }
 
-// -- Trip modal functions --
-function openTripModal(){
-  var m=document.getElementById('tripModal');
-  if(m){
-    document.getElementById('tripFrom').value='';
-    document.getElementById('tripTo').value='';
-    document.getElementById('tripDist').value='';
-    document.getElementById('tripPurpose').value='';
-    m.classList.add('open');
-  }
-}
-function closeTripModal(){
-  var m=document.getElementById('tripModal');
-  if(m)m.classList.remove('open');
-}
-function saveTripEntry(){
-  if(!S.trips)S.trips=[];
-  var from=(document.getElementById('tripFrom').value||'').trim();
-  var to=(document.getElementById('tripTo').value||'').trim();
-  var dist=parseFloat(document.getElementById('tripDist').value)||0;
-  var unit=document.getElementById('tripUnit').value||'km';
-  var purpose=(document.getElementById('tripPurpose').value||'').trim();
-  if(!dist){alert('Please enter a distance.');return;}
-  if(!from&&!to){alert('Please enter at least a start or end location.');return;}
-  S.trips.push({from:from,to:to,dist:dist,unit:unit,purpose:purpose,time:new Date().toISOString()});
-  save();
-  closeTripModal();
-  renderLocView();
-}
-function deleteTripEntry(idx){
-  if(!S.trips)return;
-  S.trips.splice(idx,1);
-  save();
-  renderLocView();
-}
-
-// Attempt JSONP geocode and update the link text + saved entry if resolved.
+// Render photo cards
 function renderPhotoView(){
   var body=document.getElementById('pvBody');
   if(!body)return;
   var dayKey=todayKey();
+  var todayLabel=new Date().toLocaleDateString('en-CA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  // Always show the ADD button at top
+  var topBar='<div class="lv-date-hdr" style="margin-bottom:10px;"><span>'+todayLabel+'</span><span class="secln"></span>'
+    +'<label class="btn pr sm" style="cursor:pointer;display:flex;align-items:center;gap:5px;">&#128247; Add photo'
+    +'<input type="file" accept="image/*,video/*" capture="environment" multiple style="display:none;" onchange="openPhotoCaptureFromBtn(this)"></label>'
+    +'</div>';
   var photoEntries=S.entries.filter(function(e){return e.type==='photo';});
   if(!photoEntries.length){
-    body.innerHTML='<div class="lv-empty">&#128247; No photos yet.<br><span style="font-size:12px;margin-top:6px;display:block;">Tap the &#128247; button to take or attach a photo.</span></div>';
+    body.innerHTML='<div class="lv-wrap" style="padding:14px;">'+topBar
+      +'<div class="lv-empty" style="margin-top:24px;">No photos yet.<br><span style="font-size:12px;margin-top:6px;display:block;">Tap "Add photo" to take or attach a photo.</span></div></div>';
     return;
   }
-  var todayLabel=new Date().toLocaleDateString('en-CA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  var html='<div class="lv-date-group"><div class="lv-date-hdr"><span>'+todayLabel+'</span><span class="secln"></span>'
-    +'<label style="font-size:12px;padding:2px 10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);cursor:pointer;">&#128247; Add<input type="file" accept="image/*,video/*" capture="environment" multiple style="display:none;" onchange="openPhotoCaptureFromBtn(this)"></label>'
-    +'</div>';
+  var html='<div class="lv-wrap" style="padding:14px;">'+topBar;
+  // Load all photo groups then render
+  var pending=photoEntries.length;
+  var entryData={};
   photoEntries.forEach(function(e){
-    var groups=loadPhotos(dayKey)[e.uid]||[];
+    loadPhotosForEntry(dayKey,e.uid,function(groups){
+      entryData[e.uid]=groups||[];
+      pending--;
+      if(pending===0)renderPhotoCards(body,html,photoEntries,entryData,dayKey);
+    });
+  });
+}
+
+function renderPhotoCards(body,html,photoEntries,entryData,dayKey){
+  photoEntries.forEach(function(e){
+    var groups=entryData[e.uid]||[];
     var totalFiles=groups.reduce(function(n,g){return n+g.files.length;},0);
     var addr=e.location&&e.location.address||'';
     var isCoords=!addr||/^-?[\d]+\.[\d]/.test(addr.trim());
-    var locLine=addr?('<div style="font-size:12px;color:var(--tl);margin:4px 0;">\uD83D\uDCCD '+(isCoords?addr:addr)+'</div>'):'';
-    var clientLine=(e.client&&e.client.name)?('<div style="font-size:12px;color:var(--pu);margin:2px 0;">'+(e.client.name)+(e.client.project?' \u2013 '+e.client.project:'')+'</div>'):'';
-    html+='<div class="card" style="margin-bottom:10px;">'
+    var locLine=addr?('<div style="font-size:12px;color:var(--tl);margin:3px 0;">\uD83D\uDCCD '+addr+'</div>'):'';
+    var clientLine=(e.client&&e.client.name)?('<div style="font-size:12px;color:var(--pu);margin:2px 0;">'+e.client.name+(e.client.project?' \u2013 '+e.client.project:'')+'</div>'):'';
+    var noteLine=e.note?('<div style="font-size:12px;color:var(--tx2);font-style:italic;margin:2px 0;">'+e.note+'</div>'):'';
+    html+='<div class="card" style="margin-bottom:10px;padding:11px 12px;">'
+      // Header row
       +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
-      +'<div>'
-      +'<span style="font-weight:600;font-size:14px;">\uD83D\uDCF7 Photo</span>'
-      +'<span style="font-size:11px;color:var(--tx3);margin-left:8px;">'+fmtT(new Date(e.time))+'</span>'
+      +'<div><span style="font-weight:600;font-size:14px;">\uD83D\uDCF7 '+fmtT(new Date(e.time))+'</span>'
       +(totalFiles>0?'<span style="font-size:11px;color:var(--tx3);margin-left:6px;">\u2022 '+totalFiles+' file'+(totalFiles>1?'s':'')+'</span>':'')
       +'</div>'
+      +'<div style="display:flex;gap:6px;">'
+      +'<button class="ibtn" onclick="openPhotoEditModal(\''+e.uid+'\',\''+dayKey+'\')">Edit</button>'
       +'<button class="ibtn del" onclick="deletePhotoEntry(\''+e.uid+'\',\''+dayKey+'\')">x</button>'
-      +'</div>'
-      +locLine+clientLine
-      +'<div class="photo-strip">';
+      +'</div></div>'
+      +locLine+clientLine+noteLine
+      // Thumbnails
+      +'<div class="photo-strip" style="margin-top:8px;">';
     groups.forEach(function(g){
       if(!g.files.length)return;
       var start=new Date(g.startTime);
       var end=new Date(g.files[g.files.length-1].ts);
       var lbl=fmtT(start)+(g.files.length>1?(' \u2013 '+fmtT(end)):'');
-      var countTxt=g.files.length>1?(g.files.length+' items \u2022 '):'';
-      html+='<div class="photo-group-lbl">'+countTxt+lbl+'</div>';
+      html+='<div class="photo-group-lbl">'+(g.files.length>1?(g.files.length+' items \u2022 '):'') +lbl+'</div>';
       g.files.forEach(function(f){
         var isVid=f.type&&f.type.indexOf('video')===0;
         html+='<div class="photo-thumb" onclick="openPhViewer(\''+e.uid+'\',\''+g.gid+'\',\''+f.fid+'\',\''+dayKey+'\')">'
-          +(isVid
-            ?'<video src="'+f.dataUrl+'" style="width:100%;height:100%;object-fit:cover;" muted playsinline></video><span class="ph-vid-badge">&#9654;</span>'
-            :'<img src="'+f.dataUrl+'" alt="photo">')
+          +(isVid?'<video src="'+f.dataUrl+'" style="width:100%;height:100%;object-fit:cover;" muted playsinline></video><span class="ph-vid-badge">&#9654;</span>':'<img src="'+f.dataUrl+'" alt="photo">')
           +'</div>';
       });
     });
-    // Add more photos button
-    html+='<label class="photo-add-btn" title="Add more photos to this entry">&#128247;'
-      +'<input type="file" accept="image/*,video/*" capture="environment" multiple style="display:none;" '
-      +'onchange="addMorePhotos(\''+e.uid+'\',this)"></label>';
-    html+='</div></div>';
+    // Add more button
+    html+='<label class="photo-add-btn" title="Add more photos">&#128247;'
+      +'<input type="file" accept="image/*,video/*" capture="environment" multiple style="display:none;" onchange="addMorePhotos(\''+e.uid+'\',this)"></label>'
+      +'</div></div>';
   });
   html+='</div>';
   body.innerHTML=html;
 }
+
+// Edit modal for existing photo entry
+var _peEditUid=null,_peDayKey=null;
+function openPhotoEditModal(entUid,dayKey){
+  _peEditUid=entUid;_peDayKey=dayKey;
+  var e=S.entries.find(function(x){return x.uid===entUid;});
+  if(!e)return;
+  // Reuse meta modal fields
+  var sel=document.getElementById('pmCat');
+  if(sel){sel.innerHTML='<option value="">-- pick --</option>';(CATS||[]).forEach(function(c){var o=document.createElement('option');o.value=c;o.textContent=c;if(c===e.tag)o.selected=true;sel.appendChild(o);});}
+  document.getElementById('pmNote').value=e.note||'';
+  document.getElementById('pmClientName').value=(e.client&&e.client.name)||'';
+  document.getElementById('pmClientProject').value=(e.client&&e.client.project)||'';
+  document.getElementById('pmPreview').innerHTML='';
+  var cb=document.getElementById('pmClientBtns');
+  if(cb){cb.innerHTML='';(CLIENT_PRESETS||[]).forEach(function(p){var b=document.createElement('button');b.className='btn sm';b.type='button';b.textContent=p;b.style.cssText='font-size:11px;padding:3px 9px;';b.onclick=function(){document.getElementById('pmClientName').value=p;document.getElementById('pmClientProject').value='';};cb.appendChild(b);});}
+  // Change save button to update
+  var modal=document.getElementById('photoMetaModal');
+  if(modal){
+    modal.querySelector('h3').textContent='\uD83D\uDCF7 Edit photo log';
+    var saveBtn=modal.querySelector('.btn.pr.sm');
+    if(saveBtn)saveBtn.setAttribute('onclick','savePhotoEdit()');
+    modal.classList.add('open');
+  }
+}
+function savePhotoEdit(){
+  if(!_peEditUid)return;
+  var e=S.entries.find(function(x){return x.uid===_peEditUid;});
+  if(e){
+    e.note=(document.getElementById('pmNote').value||'').trim();
+    e.tag=(document.getElementById('pmCat').value||'').trim()||'Photo';
+    var cn=(document.getElementById('pmClientName').value||'').trim();
+    var cp=(document.getElementById('pmClientProject').value||'').trim();
+    e.client=cn?{name:cn,project:cp,hours:0,hoursManual:false}:null;
+  }
+  save();
+  closePhotoMetaModal();
+  // Restore save button
+  var saveBtn=document.querySelector('#photoMetaModal .btn.pr.sm');
+  if(saveBtn)saveBtn.setAttribute('onclick','savePhotoWithMeta()');
+  var h3=document.querySelector('#photoMetaModal h3');
+  if(h3)h3.textContent='\uD83D\uDCF7 Add photo';
+  _peEditUid=null;_peDayKey=null;
+  renderPhotoView();
+}
+
+function deletePhotoEntry(entUid,dayKey){
+  if(!confirm('Delete this photo entry and all its photos?'))return;
+  deletePhotosForEntry(dayKey,entUid,function(){
+    S.entries=S.entries.filter(function(e){return e.uid!==entUid;});
+    save();renderPhotoView();
+  });
+}
+
+// Attempt JSONP geocode and update the link text + saved entry if resolved.
 
 function deletePhotoEntry(entUid,dayKey){
   if(!confirm('Delete this photo entry and all its photos?'))return;
